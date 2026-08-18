@@ -1,0 +1,11 @@
+# This repo is meant to hold ONLY the deployable dashboard page (index.html).
+# Everything else in this working folder — old draft versions of the dashboard
+# (which have real customer data embedded in them, unlike the current one) and
+# raw data exports (CSV/XLSX) — must NEVER be committed here, since this repo
+# is public. Ignore everything by default, then explicitly allow just the files
+# this deployment actually needs.
+*
+
+!.gitignore
+!index.html
+!README.md

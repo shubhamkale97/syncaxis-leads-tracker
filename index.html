@@ -1,0 +1,2776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Syncaxis Leads Tracker Intelligence Mechanism</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #12151b;
+    --panel: #1a1f28;
+    --panel-2: #1f2531;
+    --line: #2a313d;
+    --line-soft: #232a35;
+    --text: #e8ebf0;
+    --text-dim: #97a1b3;
+    --text-faint: #626c7d;
+    --amber: #f0a63b;
+    --amber-dim: #6b5327;
+    --blue: #4a90d9;
+    --blue-dim: #294059;
+    --green: #4cb782;
+    --green-dim: #204632;
+    --red: #d96a6a;
+    --red-dim: #4a2b2b;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.45;
+    padding: 28px 32px 60px;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(74,144,217,0.08), transparent 40%),
+      radial-gradient(circle at 90% 10%, rgba(240,166,59,0.06), transparent 35%);
+  }
+  .wrap{ max-width: 1320px; margin: 0 auto; }
+
+  header{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px; margin-bottom: 24px;
+    flex-wrap: wrap; gap: 14px;
+  }
+  .eyebrow{
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+    color: var(--amber); text-transform: uppercase; margin-bottom: 6px;
+  }
+  h1{ font-family: var(--font-display); font-weight: 600; font-size: 28px; letter-spacing: -0.01em; }
+  .header-sub{ color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+  .header-right{ text-align: right; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+  .save-indicator{
+    display:inline-flex; align-items:center; gap:6px; font-family: var(--font-mono); font-size:11px;
+    color: var(--text-faint); margin-top:6px; transition: color .2s ease;
+  }
+  .save-indicator .dot{ width:6px; height:6px; border-radius:50%; background: var(--text-faint); transition: background .2s ease;}
+  .save-indicator.saving .dot{ background: var(--amber); }
+  .save-indicator.saved .dot{ background: var(--green); }
+  .save-indicator.error .dot{ background: var(--red); }
+  .save-indicator.live .dot{ background: var(--green); box-shadow: 0 0 0 3px rgba(76,183,130,0.18); }
+  .save-indicator.offline .dot{ background: var(--red); }
+  .sync-meta{ font-family: var(--font-mono); font-size:10.5px; color: var(--text-faint); margin-top:3px; }
+  .user-badge{ font-family: var(--font-mono); font-size:11px; color: var(--text-dim); margin-top:8px; }
+  .user-badge button{ background:none; border:none; color: var(--blue); cursor:pointer; font-family:inherit; font-size:inherit; padding:0; margin-left:8px; text-decoration:underline; }
+  .edited-by{ font-size:9px; color:var(--text-faint); display:block; margin-top:1px; white-space:nowrap; }
+
+  .mgmt-access{ margin-top:12px; display:flex; justify-content:flex-end; align-items:center; gap:8px; }
+  .mgmt-access .btn{ font-size:10.5px; padding:6px 10px; }
+
+  .notes-btn{
+    display:block; width:100%; min-width:150px; max-width:220px; text-align:left; background:transparent;
+    border:1px solid transparent; border-radius:5px; padding:5px 6px; color: var(--text-dim);
+    font-family: var(--font-body); font-size:12px; cursor:pointer;
+  }
+  .notes-btn:hover{ border-color: var(--line-soft); color: var(--text); background: var(--panel-2); }
+  .notes-preview-line{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .notes-btn .notes-count{
+    display:inline-block; background: var(--blue-dim); color:#cfe0f5; font-family: var(--font-mono); font-size:10px;
+    border-radius:20px; padding:1px 6px; margin-right:6px;
+  }
+  .notes-next-followup{
+    display:block; margin-top:3px; font-family: var(--font-mono); font-size:10.5px; color: var(--amber);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .notes-btn.empty{ color: var(--text-faint); font-style:italic; }
+  .note-entry{ background: var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .note-entry.legacy{ border-style:dashed; opacity:0.85; }
+  .note-entry-head{ display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:5px; }
+  .note-date{ font-family: var(--font-mono); font-size:11px; color: var(--amber); font-weight:600; }
+  .note-by{ font-family: var(--font-mono); font-size:10.5px; color: var(--text-faint); margin-left:6px; }
+  .note-text{ font-size:12.5px; color: var(--text); white-space:pre-wrap; word-break:break-word; }
+  .note-del{ width:20px; height:20px; font-size:10px; }
+  .notes-empty-hint{ font-size:12px; color: var(--text-faint); padding:12px 0; text-align:center; }
+
+  .followup-group-title{
+    font-family: var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+    color: var(--text-faint); margin-bottom:8px;
+  }
+  .followup-item{
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    background: var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; margin-bottom:8px; cursor:pointer; transition: border-color .12s ease;
+  }
+  .followup-item:hover{ border-color: var(--text-faint); }
+  .followup-item-main{ min-width:0; flex:1; }
+  .followup-item-company{ font-size:12.5px; font-weight:600; color: var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .followup-item-note{ font-size:11.5px; color: var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .followup-item-meta{ flex:none; text-align:right; }
+  .followup-item-date{ font-family: var(--font-mono); font-size:11px; color: var(--text-dim); }
+  .followup-badge{ display:block; font-family: var(--font-mono); font-size:10px; margin-top:2px; white-space:nowrap; }
+  .followup-badge.overdue{ color: var(--red); }
+  .followup-badge.soon{ color: var(--amber); }
+  @media (max-width:760px){ .followup-item{ flex-direction:column; align-items:flex-start; } .followup-item-meta{ text-align:left; } }
+
+  .offline-banner{
+    display:none; position:sticky; top:0; z-index:300; background: var(--red-dim); color:#ffd9d9;
+    border-bottom:1px solid var(--red); text-align:center; font-family: var(--font-mono); font-size:12px;
+    padding:9px 14px; line-height:1.4;
+  }
+  .offline-banner.show{ display:block; }
+
+  /* Fixed 6-column grid, not auto-fit: auto-fit stretches a short last row's tiles
+     wider than the row above it whenever the tile count doesn't divide evenly,
+     which looked inconsistent with 12 KPI tiles wrapping as 8+4. A fixed count
+     keeps every tile the same width on every row regardless of how many there are. */
+  .kpi-row{ display:grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 26px; }
+  @media (max-width: 1100px){ .kpi-row{ grid-template-columns: repeat(3, 1fr); } }
+  .kpi{
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 16px 14px; position: relative; overflow:hidden;
+  }
+  .kpi::before{ content:''; position:absolute; left:0; top:0; bottom:0; width: 3px; background: var(--accent, var(--blue)); }
+  .kpi-label{ font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;}
+  .kpi-value{ font-family: var(--font-mono); font-size: 27px; font-weight: 700; color: var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi-value.currency{ font-size: 19px; }
+  .kpi-sub{ font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+  .inr-prefix{ color: var(--text-faint); font-family: var(--font-mono); font-size:11px; flex:none; }
+  .lead-value-cell{ display:flex; align-items:center; gap:3px; }
+  .lead-value-cell .cell-input{ min-width:76px; text-align:right; font-family: var(--font-mono); font-size:11.5px; }
+
+  .section{
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 22px 22px; margin-bottom: 20px;
+  }
+  .section-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 16px; flex-wrap:wrap; gap:10px;}
+  .section-title{ font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+  .section-note{ font-size: 12px; color: var(--text-faint); }
+
+  .chart-grid{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+  @media (max-width: 1100px){ .chart-grid{ grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 700px){ .chart-grid{ grid-template-columns: 1fr; } .kpi-row{ grid-template-columns: repeat(2,1fr);} }
+
+  .bar-row{ display:grid; grid-template-columns: 108px 1fr 32px; align-items:center; gap:8px; margin-bottom: 9px; }
+  .bar-label{ font-size: 11.5px; color: var(--text-dim); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-track{ background: var(--line-soft); border-radius: 4px; height: 15px; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:4px; transition: width .5s ease; }
+  .bar-val{ font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); }
+
+  .matrix-toggle{ display:flex; gap:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:3px; }
+  .matrix-toggle button{
+    font-family: var(--font-mono); font-size: 11px; padding:5px 10px; border-radius:6px; border:none;
+    background:transparent; color:var(--text-faint); cursor:pointer; letter-spacing:0.03em;
+  }
+  .matrix-toggle button.active{ background: var(--blue-dim); color: #cfe0f5; }
+  .matrix-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:8px; }
+  table.matrix{ border-collapse: collapse; width:100%; font-size: 11.5px; }
+  table.matrix th, table.matrix td{ padding: 7px 8px; text-align:center; border: 1px solid var(--line-soft); white-space:nowrap; }
+  table.matrix th{ background: var(--panel-2); font-family: var(--font-mono); font-weight:500; color:var(--text-dim); font-size:10.5px; }
+  table.matrix th.rowhead, table.matrix td.rowhead{ text-align:left; position:sticky; left:0; background: var(--panel-2); color: var(--text); font-weight:600; z-index:2; }
+  table.matrix td.cell{ font-family: var(--font-mono); cursor:pointer; color: var(--text-dim); }
+  table.matrix td.cell:hover{ outline: 1px solid var(--amber); outline-offset:-1px; }
+  table.matrix td.cell.zero{ color: #3a4150; }
+  table.matrix td.total, table.matrix th.total{ font-weight:700; color: var(--amber); background: rgba(240,166,59,0.06); }
+
+  .insight{
+    background: var(--panel-2); border:1px solid var(--line); border-left: 3px solid var(--amber);
+    border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: var(--text-dim); margin-top: 14px;
+  }
+  .insight b{ color: var(--text); }
+
+  .filter-bar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .filter-bar select, .filter-bar input{
+    background: var(--panel-2); border:1px solid var(--line); color: var(--text);
+    font-family: var(--font-body); font-size:12.5px; padding:7px 10px; border-radius:7px; outline:none;
+  }
+  .filter-bar input{ min-width:190px; }
+  .filter-bar select:focus, .filter-bar input:focus{ border-color: var(--blue); }
+  .btn{
+    font-family: var(--font-mono); font-size:11px; letter-spacing:.02em; cursor:pointer;
+    border-radius: 7px; padding: 7px 12px; border:1px solid var(--line); background:none; color: var(--text-dim);
+  }
+  .btn:hover{ color: var(--text); border-color: var(--text-faint); }
+  .btn-primary{ background: var(--amber-dim); border-color: var(--amber-dim); color: #f6c47f; }
+  .btn-primary:hover{ color: #fff; border-color: var(--amber); }
+
+  .table-scroll{ overflow-x:auto; margin-top:14px; border:1px solid var(--line); border-radius:8px; max-height: 560px; overflow-y:auto;}
+  table.leads{ border-collapse:collapse; width:100%; font-size:12px; min-width: 1500px; }
+  table.leads th{
+    position:sticky; top:0; background: var(--panel-2); text-align:left; padding:9px 8px;
+    font-family: var(--font-mono); font-size:10px; color: var(--text-dim); text-transform:uppercase; letter-spacing:.04em;
+    border-bottom:1px solid var(--line); z-index: 1; white-space:nowrap;
+  }
+  table.leads td{ padding:5px 8px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
+  table.leads tr:hover td{ background: rgba(255,255,255,0.02); }
+  tr.new-row td{ background: rgba(76,183,130,0.05); }
+
+  .cell-input{
+    width:100%; background:transparent; border:1px solid transparent; color: var(--text);
+    font-family: var(--font-body); font-size:12px; padding:5px 6px; border-radius:5px; outline:none;
+  }
+  .cell-input:hover{ border-color: var(--line-soft); }
+  .cell-input:focus{ border-color: var(--blue); background: var(--panel-2); }
+  select.cell-input{ cursor:pointer; }
+  input.cell-input[type="email"], input.cell-input[type="tel"]{ font-family: var(--font-mono); font-size:11.5px; }
+
+  /* ============ Mobile ============
+     Below 760px the leads table becomes a stacked list of cards — same DOM,
+     same inputs, same wiring, just a different visual layout via CSS (each
+     <td> already carries a data-label attribute for its ::before label). */
+  @media (max-width: 760px){
+    body{ padding: 14px 12px 40px; }
+    header{ flex-direction:column; align-items:flex-start; gap:10px; }
+    .header-right{ text-align:left; width:100%; }
+    .mgmt-access{ justify-content:flex-start; margin-top:10px; }
+    h1{ font-size:21px; }
+    .eyebrow{ font-size:10px; }
+
+    .kpi-row{ grid-template-columns: repeat(2, 1fr); gap:8px; margin-bottom:16px; }
+    .kpi{ padding:11px 12px 9px; }
+    .kpi-value{ font-size:19px; }
+    .kpi-value.currency{ font-size:15px; }
+
+    .section{ padding:14px 14px 16px; }
+    .chart-grid{ grid-template-columns: 1fr; gap:20px; }
+    .report-chart-row{ grid-template-columns: 1fr; }
+
+    .filter-bar{ flex-direction:column; align-items:stretch; }
+    .filter-bar input, .filter-bar select{ width:100%; min-width:0; }
+    .filter-bar .btn{ width:100%; }
+
+    .form-grid{ grid-template-columns: 1fr !important; }
+    .modal{ padding:18px 16px; max-height:90vh; }
+
+    .matrix-scroll{ font-size:11px; }
+
+    .icon-btn{ width:32px; height:32px; font-size:14px; }
+    .mgmt-toolbar{ flex-direction:column; align-items:flex-start; gap:10px; }
+    .report-toolbar{ flex-wrap:wrap; }
+
+    /* Leads table → cards */
+    .table-scroll{ overflow-x:visible; max-height:none; border:none; }
+    table.leads{ min-width:0; width:100%; }
+    table.leads thead{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+    table.leads, table.leads tbody{ display:block; width:100%; }
+    table.leads tr{
+      display:block; background: var(--panel); border:1px solid var(--line); border-radius:10px;
+      margin-bottom:12px; padding:4px 12px 8px;
+    }
+    table.leads td{
+      display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line-soft);
+      text-align:right;
+    }
+    table.leads td:last-child{ border-bottom:none; }
+    table.leads td::before{
+      content: attr(data-label); flex:none; width:38%; text-align:left;
+      font-family: var(--font-mono); font-size:9.5px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.03em;
+    }
+    table.leads td > *{ flex:1; min-width:0; }
+    table.leads .cell-input{ text-align:right; }
+    table.leads select.cell-input{ text-align:left; }
+    table.leads .actions-cell{ justify-content:flex-end; width:100%; }
+    table.leads .lead-value-cell{ justify-content:flex-end; }
+    /* First two cells (# and Enquiry No) become a small header row, third (Company) a bold card title */
+    table.leads td:nth-child(1), table.leads td:nth-child(2){
+      display:inline-flex; width:auto; border-bottom:none; padding:0 10px 0 0; color:var(--text-faint); font-size:11px;
+    }
+    table.leads td:nth-child(1)::before, table.leads td:nth-child(2)::before{ content:none; }
+    table.leads td:nth-child(1) .cell-input, table.leads td:nth-child(2) .cell-input{
+      width:auto; padding:2px 4px; font-family: var(--font-mono); font-size:11px; color:var(--text-faint);
+    }
+    table.leads td:nth-child(3){ padding-top:2px; }
+    table.leads td:nth-child(3)::before{ content:none; }
+    table.leads td:nth-child(3) .cell-input{ font-size:15px; font-weight:600; color:var(--text); text-align:left; }
+  }
+
+  .status-pill{ font-size:10.5px; }
+  select.status-Not-Contacted{ color: var(--text-faint); }
+  select.status-Contacted{ color: var(--blue); }
+  select.status-Meeting-Scheduled{ color: var(--amber); }
+  select.status-Quotation-Sent{ color: #c9a4f0; }
+  select.status-Won{ color: var(--green); }
+  select.status-Lost{ color: var(--red); }
+  select.status-Not-Relevant{ color: var(--text-faint); }
+
+  .tag{ display:inline-block; padding:2px 7px; border-radius:20px; font-size:10.5px; font-family: var(--font-mono); white-space:nowrap; }
+  .tag-dobot{ background: var(--amber-dim); color: #f6c47f; }
+  .tag-rexroth{ background: var(--blue-dim); color: #a9cdf0; }
+  .tag-both{ background: linear-gradient(90deg, var(--amber-dim), var(--blue-dim)); color: #f0e0c0; }
+  .tag-other{ background: #2a313d; color: var(--text-faint); }
+
+  .actions-cell{ display:flex; gap:5px; white-space:nowrap; }
+  .icon-btn{
+    display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+    border-radius:6px; border:1px solid var(--line); background: var(--panel-2); color: var(--text-dim);
+    cursor:pointer; text-decoration:none; font-size:12px; transition: all .12s ease;
+  }
+  .icon-btn:hover{ color:var(--text); border-color: var(--text-faint); }
+  .icon-btn.disabled{ opacity:.3; pointer-events:none; }
+  .icon-btn.danger:hover{ color: var(--red); border-color: var(--red); }
+  .icon-btn.mail:hover{ color: var(--amber); border-color: var(--amber); }
+  .toast-copied{ color: var(--green) !important; border-color: var(--green) !important; }
+
+  .result-count{ font-family: var(--font-mono); font-size:11.5px; color: var(--text-faint); }
+
+  /* modal */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(8,10,14,0.72); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    background: var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px 24px; width:100%; max-width: 560px;
+    max-height: 86vh; overflow-y:auto;
+  }
+  .modal h2{ font-family: var(--font-display); font-size:18px; margin-bottom:4px;}
+  .modal .section-note{ margin-bottom:16px; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+  .form-grid .full{ grid-column: 1 / -1; }
+  .form-field label{ display:block; font-size:10.5px; color:var(--text-faint); font-family: var(--font-mono); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+  .form-field input, .form-field select, .form-field textarea{
+    width:100%; background: var(--panel-2); border:1px solid var(--line); color: var(--text);
+    font-family: var(--font-body); font-size:12.5px; padding:8px 10px; border-radius:7px; outline:none;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{ border-color: var(--blue); }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+
+  footer{ text-align:center; color: var(--text-faint); font-size:11px; margin-top: 30px; font-family: var(--font-mono); line-height:1.9; }
+  .dev-credit{ border-bottom:1px dotted var(--text-faint); cursor:help; color: var(--text-dim); }
+
+  /* PDF report overlay — rendered on top of the whole page, printed via window.print()
+     rather than window.open() so popup blockers can never kill it. */
+  .report-overlay{ position:fixed; inset:0; background:#fff; z-index:200; display:none; overflow-y:auto; }
+  .report-overlay.open{ display:block; }
+  .report-toolbar{
+    position:sticky; top:0; background:#fff; border-bottom:1px solid #ddd; padding:12px 24px;
+    display:flex; justify-content:flex-end; gap:10px; z-index:2;
+  }
+  .report-toolbar button{
+    padding:8px 16px; border-radius:6px; border:1px solid #ccc; background:#f7f7f7; cursor:pointer;
+    font-family: var(--font-mono); font-size:12px; color:#222;
+  }
+  .report-toolbar button.primary{ background:#f0a63b; border-color:#f0a63b; color:#1a1200; font-weight:600; }
+  #reportContent{ padding:10px 34px 50px; color:#222; font-family: Arial, Helvetica, sans-serif; max-width:1100px; margin:0 auto; }
+  .report-h1{ font-size:20px; margin:0 0 2px; }
+  .report-sub{ color:#666; font-size:12px; margin-bottom:20px; }
+  .report-section-title{ font-size:14px; font-weight:700; margin:26px 0 10px; border-bottom:2px solid #222; padding-bottom:4px; color:#222; }
+  .report-kpi-grid{ display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; }
+  @media print{ .report-kpi-grid{ grid-template-columns:repeat(4, 1fr); } }
+  .report-kpi{ border:1px solid #ddd; border-radius:6px; padding:10px 12px; }
+  .report-kpi-label{ font-size:10px; color:#777; text-transform:uppercase; }
+  .report-kpi-value{ font-size:18px; font-weight:700; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .report-chart-row{ display:grid; grid-template-columns:1fr 1fr; gap:26px; margin-bottom:10px; }
+  table.report-table{ border-collapse:collapse; width:100%; font-size:10.5px; margin-top:8px; }
+  table.report-table th{ background:#f2f2f2; text-align:left; padding:5px 6px; border:1px solid #ddd; color:#222; }
+  table.report-table td{ padding:4px 6px; border:1px solid #eee; color:#222; }
+  @media print{
+    body > *:not(.report-overlay){ display:none !important; }
+    .report-overlay{ position:static !important; }
+    .report-toolbar{ display:none !important; }
+    table.report-table tr{ break-inside: avoid; }
+  }
+
+  /* Management Panel — dark-themed, in-app style (distinct from the light print-styled
+     PDF report), gated behind a real Firebase email/password sign-in. */
+  .mgmt-overlay{ position:fixed; inset:0; background: var(--bg); z-index:210; display:none; overflow-y:auto; }
+  .mgmt-overlay.open{ display:block; }
+  .mgmt-toolbar{
+    position:sticky; top:0; background: var(--panel); border-bottom:1px solid var(--line);
+    padding:14px 24px; display:flex; justify-content:space-between; align-items:center; z-index:2;
+  }
+  .mgmt-toolbar-title{ font-family: var(--font-display); font-size:16px; font-weight:600; color: var(--text); }
+  #mgmtPanelContent{ padding:24px 32px 60px; max-width:1320px; margin:0 auto; }
+  .mgmt-section{
+    background: var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px 20px; margin-bottom:18px;
+  }
+  .mgmt-section-title{ font-family: var(--font-display); font-size:15px; font-weight:600; margin-bottom:14px; color: var(--text); }
+  .mgmt-bar-row{ display:grid; grid-template-columns: 150px 1fr 90px; align-items:center; gap:8px; margin-bottom:9px; }
+  .mgmt-bar-label{ font-size:11.5px; color: var(--text-dim); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mgmt-bar-track{ background: var(--line-soft); border-radius:4px; height:15px; overflow:hidden; }
+  .mgmt-bar-fill{ height:100%; border-radius:4px; background: var(--green); }
+  .mgmt-bar-val{ font-family: var(--font-mono); font-size:11.5px; color: var(--text-dim); text-align:right; }
+  .mgmt-empty{ font-size:12.5px; color: var(--text-faint); padding:10px 0; }
+
+  /* Mandatory sign-in gate — fully opaque (not the usual translucent overlay) since
+     it must block the whole app, including data, until a real login succeeds. */
+  .auth-gate{ z-index:400; background: var(--bg); }
+
+  .role-pill{
+    display:inline-block; margin-left:8px; padding:2px 8px; border-radius:20px;
+    font-family: var(--font-mono); font-size:9.5px; letter-spacing:.04em; text-transform:uppercase;
+    background: var(--blue-dim); color:#cfe0f5; vertical-align:middle;
+  }
+  .role-pill.role-superadmin{ background: var(--amber-dim); color:#f6c47f; }
+  .role-pill.role-viewer{ background: #2a313d; color: var(--text-faint); }
+
+  .user-row{ display:grid; grid-template-columns: 1.6fr 1fr 1fr 90px 90px; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line-soft); font-size:12.5px; }
+  .user-row.head{ font-family: var(--font-mono); font-size:10px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); }
+  .user-row select{ background: var(--panel-2); border:1px solid var(--line); color: var(--text); font-family: var(--font-body); font-size:12px; padding:5px 6px; border-radius:6px; }
+  @media (max-width:760px){ .user-row{ grid-template-columns: 1fr; gap:4px; padding:10px 0; } }
+</style>
+</head>
+<body>
+<div class="offline-banner" id="offlineBanner">
+  ⚠ No internet connection — you can keep viewing and editing, but nothing will sync to your team until you're back online.
+</div>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">Exhibition Follow-Up · Live Lead Tracker</div>
+      <h1>Syncaxis Leads Tracker Intelligence Mechanism</h1>
+      <div class="header-sub">Editable lead tracker — update status, notes and contact details as you follow up. Changes sync live to your whole team.</div>
+      <div class="save-indicator" id="saveIndicator"><span class="dot"></span><span id="saveText">Connecting…</span></div>
+      <div class="sync-meta" id="lastUpdatedMeta"></div>
+      <div class="user-badge">Signed in as <b id="currentUserLabel">—</b><span class="role-pill" id="currentRolePill"></span></div>
+    </div>
+    <div class="header-right">
+      SOURCE<br><b>Exhibition_Data.xlsx</b>
+      <div class="mgmt-access" id="mgmtAccess">
+        <button class="btn btn-primary" id="openMgmtPanelBtn" type="button" style="display:none;">Management Panel</button>
+        <button class="btn btn-primary" id="openSuperAdminBtn" type="button" style="display:none;">⚙ Super Admin</button>
+        <button class="btn" id="signOutBtn" type="button" style="display:none;">Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Follow-Up Activity</div>
+        <div class="section-note">Who needs a call today — set a "Next Follow-up" date on any lead to track it here</div>
+      </div>
+    </div>
+    <div class="kpi-row" id="followUpKpiRow" style="margin-bottom:0;"></div>
+    <div id="followUpList" style="margin-top:16px;"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Pipeline Health</div>
+        <div class="section-note">Lead quality, inquiry source, and brand split — Dobot &amp; Rexroth combined here, filterable in the table below</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div>
+        <div class="section-note" style="margin-bottom:10px; font-family: var(--font-mono); text-transform:uppercase; font-size:10.5px;">Lead Quality</div>
+        <div id="qualityChart"></div>
+      </div>
+      <div>
+        <div class="section-note" style="margin-bottom:10px; font-family: var(--font-mono); text-transform:uppercase; font-size:10.5px;">Inquiry Source</div>
+        <div id="sourceChart"></div>
+      </div>
+      <div>
+        <div class="section-note" style="margin-bottom:10px; font-family: var(--font-mono); text-transform:uppercase; font-size:10.5px;">Brand Comparison</div>
+        <div id="brandChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Where the demand is</div>
+        <div class="section-note">Leads by state, application, and follow-up progress — updates live as you work leads</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div>
+        <div class="section-note" style="margin-bottom:10px; font-family: var(--font-mono); text-transform:uppercase; font-size:10.5px;">By State</div>
+        <div id="stateChart"></div>
+      </div>
+      <div>
+        <div class="section-note" style="margin-bottom:10px; font-family: var(--font-mono); text-transform:uppercase; font-size:10.5px;">By Application</div>
+        <div id="appChart"></div>
+      </div>
+      <div>
+        <div class="section-note" style="margin-bottom:10px; font-family: var(--font-mono); text-transform:uppercase; font-size:10.5px;">Follow-Up Status</div>
+        <div id="statusChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Area × Application Matrix</div>
+        <div class="section-note">Click a cell to filter the lead list below</div>
+      </div>
+      <div class="matrix-toggle" id="matrixToggle">
+        <button data-mode="state" class="active">STATE</button>
+        <button data-mode="city">CITY</button>
+      </div>
+    </div>
+    <div class="matrix-scroll"><div id="matrixHolder"></div></div>
+    <div class="insight" id="insightBox"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Lead Detail — Edit &amp; Follow Up</div>
+        <div class="section-note">Click any field to edit · changes save automatically · use ✉ to draft a follow-up email</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <span class="result-count" id="resultCount"></span>
+        <button class="btn" id="copyAllBtn">📋 COPY ALL DRAFTS</button>
+        <button class="btn" id="exportBtn">⬇ CSV</button>
+        <button class="btn" id="exportXlsxBtn">⬇ EXCEL</button>
+        <button class="btn" id="exportPdfBtn">⬇ PDF REPORT</button>
+        <button class="btn btn-primary" id="addLeadBtn">+ ADD LEAD</button>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <input type="text" id="searchBox" placeholder="Search company, visitor, city, email…">
+      <select id="stateFilter"><option value="">All States</option></select>
+      <select id="cityFilter"><option value="">All Cities</option></select>
+      <select id="appFilter"><option value="">All Applications</option></select>
+      <select id="productFilter"><option value="">All Products</option></select>
+      <select id="statusFilter"><option value="">Status: Any</option></select>
+      <button class="btn" id="clearBtn">CLEAR FILTERS</button>
+    </div>
+    <div class="table-scroll">
+      <table class="leads">
+        <thead>
+          <tr>
+            <th>#</th><th>Enquiry No</th><th>Company</th><th>Visitor</th><th>State</th><th>City</th>
+            <th>Application</th><th>Product</th><th>Email</th><th>Phone</th>
+            <th>Status</th><th>Quality</th><th>Source</th><th>Lead Type</th><th>Moved to SourcePro</th>
+            <th>Lead Value (₹)</th><th>Generated By</th><th>Follow-ups</th><th>Last Follow-up</th>
+            <th>Next Follow-up</th><th>ERP Lead No</th><th>Order No</th><th>Order Date</th><th>Received</th>
+            <th>Notes</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="leadsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>SYNCAXIS LEADS TRACKER INTELLIGENCE MECHANISM — INTERNAL USE — EDITS SYNC LIVE TO YOUR TEAM VIA FIREBASE<br>Developed by Shubham Rajesh Kale Sanjyoti AKA <span class="dev-credit" title="Shubham Rajesh Kale Sanjyoti">Sniper</span></footer>
+</div>
+
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2>Add New Lead</h2>
+    <div class="section-note">Fields marked required help this lead show up correctly in the charts above.</div>
+    <div class="form-grid" id="addForm"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelAddBtn">CANCEL</button>
+      <button class="btn btn-primary" id="saveAddBtn">SAVE LEAD</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="offlineModal">
+  <div class="modal" style="max-width:440px; border-color:var(--red);">
+    <h2>⚠ No Internet Connection</h2>
+    <div class="section-note">This device isn't connected to the internet right now. You can still view and edit leads, but <b style="color:var(--text)">nothing you enter will sync to your team</b> — it stays only in this browser until you're back online, and could be lost if you close the tab before reconnecting.</div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="offlineModalOkBtn">OK, I UNDERSTAND</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="notesModal">
+  <div class="modal" style="max-width:580px;">
+    <h2>Follow-Up Notes</h2>
+    <div class="section-note" id="notesModalSub"></div>
+    <div id="addNoteSection">
+      <div class="form-grid" style="grid-template-columns: 150px 1fr;">
+        <div class="form-field"><label>Date</label><input type="date" id="noteDateInput"></div>
+        <div class="form-field"><label>Note</label><input type="text" id="noteTextInput" placeholder="What happened / next step…" maxlength="500"></div>
+        <div class="form-field"><label>Next Follow-up</label><input type="date" id="noteNextFollowUpInput"></div>
+        <div class="form-field" style="align-self:end;"><div class="section-note" style="margin-bottom:9px;">Sets this lead's "Next Follow-up Date" — shown in the Follow-Up Activity section on the main dashboard. Leave blank to clear it.</div></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start; margin-top:4px;">
+        <button class="btn btn-primary" id="addNoteBtn">+ ADD NOTE</button>
+      </div>
+    </div>
+    <div class="section-note" style="margin-top:20px; margin-bottom:10px; text-transform:uppercase; font-family:var(--font-mono); font-size:10.5px;">History — newest first</div>
+    <div id="notesHistoryList" style="max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;"></div>
+    <div class="modal-actions">
+      <button class="btn" id="closeNotesBtn">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="exportScopeModal">
+  <div class="modal" style="max-width:440px;">
+    <h2>What do you want to export?</h2>
+    <div class="section-note" id="exportScopeSub"></div>
+    <div class="modal-actions" style="justify-content:flex-start; flex-wrap:wrap; margin-top:6px;">
+      <button class="btn btn-primary" id="exportFilteredBtn">FILTERED RESULTS ONLY (<span id="exportFilteredCount"></span>)</button>
+      <button class="btn" id="exportAllBtn">ALL LEADS (<span id="exportAllCount"></span>)</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="exportScopeCancelBtn">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<div class="report-overlay" id="reportOverlay">
+  <div class="report-toolbar">
+    <button id="reportPrintBtn" class="primary">🖨 Print / Save as PDF</button>
+    <button id="reportCloseBtn">✕ Close</button>
+  </div>
+  <div id="reportContent"></div>
+</div>
+
+<div class="modal-overlay auth-gate open" id="authGateOverlay">
+  <div class="modal" style="max-width:420px;">
+    <h2>Sign In Required</h2>
+    <div class="section-note">This dashboard is restricted to invited team members — it isn't open to anyone with the link. Sign in with the email &amp; password your admin gave you. This is a real Firebase login: wrong attempts are rejected server-side and automatically rate-limited.</div>
+    <div class="form-field"><label>Email</label><input type="email" id="authEmailInput" placeholder="you@syncaxis.com" autocomplete="username"></div>
+    <div class="form-field" style="margin-top:10px;"><label>Password</label><input type="password" id="authPasswordInput" placeholder="••••••••" autocomplete="current-password"></div>
+    <div class="section-note" id="authLoginError" style="color:var(--red); display:none; margin-top:8px;"></div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button class="btn btn-primary" id="authLoginSubmitBtn">SIGN IN</button>
+    </div>
+  </div>
+</div>
+
+<div class="mgmt-overlay" id="superAdminOverlay">
+  <div class="mgmt-toolbar">
+    <div class="mgmt-toolbar-title">⚙ Super Admin — User Access</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" id="superAdminCloseBtn">✕ Close</button>
+    </div>
+  </div>
+  <div id="superAdminContent" style="padding:24px 32px 60px; max-width:1100px; margin:0 auto;"></div>
+</div>
+
+<div class="mgmt-overlay" id="mgmtPanelOverlay">
+  <div class="mgmt-toolbar">
+    <div class="mgmt-toolbar-title">🔒 Management Panel</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" id="mgmtPanelExportBtn">⬇ Full PDF Report</button>
+      <button class="btn" id="mgmtPanelCloseBtn">✕ Close</button>
+    </div>
+  </div>
+  <div id="mgmtPanelContent"></div>
+</div>
+
+<script>
+let BASE_LEADS = []; // seed dataset lives only in Firestore now (see Super Admin panel migration) -- never embedded here
+</script>
+<script>
+// ============================================================================
+// FIREBASE SETUP — fill this in once, then every teammate who opens this file
+// (from the same shared copy / link) reads and writes the SAME live dataset.
+//
+// 1. Go to https://console.firebase.google.com → Create project (free "Spark"
+//    plan is enough).
+// 2. Project settings (gear icon) → General → "Your apps" → Add app → Web (</>)
+//    → copy the firebaseConfig object it gives you into FIREBASE_CONFIG below.
+// 3. Build → Firestore Database → Create database → start in production mode.
+// 4. Build → Authentication → Sign-in method → enable "Email/Password". There is
+//    NO anonymous access anymore — every user must be a real, provisioned account,
+//    added either as the one hardcoded SUPERADMIN_EMAIL below (create that ONE
+//    account by hand in the console) or, after that, through the app's own
+//    Super Admin panel (which creates further accounts for you, securely).
+// 5. Firestore → Rules — enforce the role model server-side (this is the REAL
+//    security boundary; the JS in this file is only the matching UI):
+//      rules_version = '2';
+//      service cloud.firestore {
+//        match /databases/{database}/documents {
+//          function signedIn() { return request.auth != null; }
+//          function isSuperAdmin() { return signedIn() && request.auth.token.email == 'shubham.kale@syncaxis.com'; }
+//          function isLegacyManager() { return signedIn() && request.auth.token.email == 'ddbisure@syncaxis.co.in'; }
+//          function myRoleDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+//          function hasRoleDoc() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+//          function isActive() { return hasRoleDoc() && myRoleDoc().data.disabled != true; }
+//          function myRole() { return isActive() ? myRoleDoc().data.role : null; }
+//          function canRead() { return isSuperAdmin() || isLegacyManager() || (isActive() && myRole() in ['management','sales','viewer']); }
+//          function canWrite() { return isSuperAdmin() || isLegacyManager() || (isActive() && myRole() in ['management','sales']); }
+//          match /exhibitionDashboards/{docId} {
+//            allow read: if canRead();
+//            allow write: if canWrite();
+//          }
+//          match /users/{uid} {
+//            allow read: if isSuperAdmin() || (signedIn() && request.auth.uid == uid);
+//            allow write: if isSuperAdmin();
+//          }
+//        }
+//      }
+// 6. Deploy this file (e.g. via GitHub Pages) and share the ONE link with your
+//    team — everyone opens the same page, but only sees data once they sign in
+//    with an account the Super Admin actually granted.
+//
+// Until you fill this in, the dashboard still works normally but only saves
+// to the local browser (no cross-device sync, no login) — a small banner says so.
+// ============================================================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBN1ow9mkIgYhdmLiCVGCa9OSPEvCFOCd0",
+  authDomain: "exhibition-lead-dashboard.firebaseapp.com",
+  projectId: "exhibition-lead-dashboard",
+  storageBucket: "exhibition-lead-dashboard.firebasestorage.app",
+  messagingSenderId: "597395521176",
+  appId: "1:597395521176:web:dd44b202af24c751631aed"
+};
+const FIREBASE_ENABLED = !!(FIREBASE_CONFIG.apiKey && !String(FIREBASE_CONFIG.apiKey).startsWith('PASTE_'));
+const BOARD_COLLECTION = 'exhibitionDashboards';
+const BOARD_DOC = 'sharedLeadBoard';
+const USERS_COLLECTION = 'users';
+const AUTOSAVE_INTERVAL_MS = 10000; // heartbeat autosave while actively typing
+
+// ============ Access control ============
+// This email always has full superadmin rights (manage users, management panel,
+// edit everything) — checked BOTH here (for UI) and inside Firestore Security Rules
+// (the actual enforcement layer, which a client can't spoof by editing this file).
+// It exists specifically so there's always at least one account that can bootstrap
+// / recover the whole permission system even with an empty `users` collection.
+const SUPERADMIN_EMAIL = 'shubham.kale@syncaxis.com';
+// Pre-existing management account from before this role system existed — kept as a
+// second hardcoded fallback (also mirrored in the security rules) purely for backward
+// compatibility, so it doesn't lose access on upgrade. New accounts should go through
+// the Super Admin panel instead, which gives them a normal role document.
+const LEGACY_MANAGER_EMAIL = 'ddbisure@syncaxis.co.in';
+const ROLE_LABELS = { superadmin:'SUPERADMIN', management:'MANAGEMENT', sales:'SALES', viewer:'VIEWER' };
+
+// ============ Helpers ============
+const $ = sel => document.querySelector(sel);
+const fmtPct = (n, d) => d ? Math.round((n/d)*100) + '%' : '0%';
+// Indian digit grouping (lakhs/crores, e.g. 1,25,000) without a currency symbol —
+// the ₹ symbol is added separately in the UI so the raw number stays clean for exports/sums.
+const INR_FORMATTER = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+function formatINR(n){
+  const num = Number(n);
+  if(n === '' || n === null || n === undefined || isNaN(num)) return '';
+  return INR_FORMATTER.format(num);
+}
+const MAX_LEAD_VALUE = 999999999999; // ₹9,999,99,99,999 — comfortably above any realistic deal size, well under Number.MAX_SAFE_INTEGER
+// Parses a Lead Value input into { value, error }. Deliberately does NOT just strip
+// non-digit characters and concatenate what's left — that silently mangled decimals
+// ("1250.75" -> 125075, a 100x error) and shorthand ("1.25L" -> 125, a 1000x error)
+// with no feedback. Instead: accept plain numbers (with optional commas/₹ and at most
+// one decimal point, rounded to the nearest rupee), and return an error message for
+// anything else — negative signs, letters/shorthand, or unreasonably large numbers —
+// rather than silently guessing.
+function parseINR(v){
+  let s = String(v == null ? '' : v).trim();
+  if(!s) return { value: '', error: null };
+  if(/^-/.test(s)) return { value: null, error: "Lead Value can't be negative — please enter a positive amount." };
+  s = s.replace(/₹/g, '').replace(/,/g, '').trim();
+  if(!/^\d+(\.\d+)?$/.test(s)){
+    return { value: null, error: 'Enter a plain rupee amount (digits only — no letters or shorthand like "L"/"Cr").' };
+  }
+  const num = Math.round(parseFloat(s));
+  if(!isFinite(num)) return { value: null, error: 'Enter a valid number.' };
+  if(num > MAX_LEAD_VALUE) return { value: null, error: "That number looks too large — please double-check it." };
+  return { value: num, error: null };
+}
+const STORAGE_KEY = 'exhibition-overrides';      // local (this browser only) fallback
+const STATUS_OPTIONS = ['Not Contacted','Contacted','Meeting Scheduled','Quotation Sent','Won','Lost','Not Relevant'];
+const CARD_OPTIONS = ['Yes','No','Photo Only','Not Recorded'];
+const PRODUCT_OPTIONS = ['Dobot','Rexroth','Dobot + Rexroth','Vision System','Not Specified'];
+const LEAD_QUALITY_OPTIONS = ['🔥 Hot','🌤 Warm','❄️ Cold'];
+const INQUIRY_SOURCE_OPTIONS = ['Exhibition Booth','Website','Phone Call','Direct Email','Direct Visit','Old Customer','Referral','Other'];
+const LEAD_TYPE_OPTIONS = ['Project','Trading','Other']; // from INQUIRY_REGISTER sheet's "Lead Type" column
+const SOURCEPRO_OPTIONS = ['Yes','No']; // maps to the sheet's "Moved to Source Pro?" boolean column
+const CLOSED_STATUSES = ['Won','Lost','Not Relevant']; // a lead in one of these is no longer "open pipeline"
+// Financial-year code used to suggest an Enquiry Number, e.g. Aug 2026 -> "2627" (FY runs Apr-Mar,
+// matching the sheet's "SI/2627/xxxx" numbering). Purely a starting suggestion — always editable.
+function currentFYCode(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const startYear = d.getMonth() >= 3 ? y : y - 1; // April (month index 3) starts the FY
+  return String(startYear).slice(-2) + String(startYear + 1).slice(-2);
+}
+
+// BASE_LEADS (declared above, in the first <script> block) is mutable so it can be
+// overwritten by the live Firestore sync below (see startRealtimeSync) — once the
+// seed dataset has been migrated into Firestore (Super Admin panel → "Migrate Seed
+// Data"), the PUBLIC deployment of this file ships with that literal array emptied
+// out entirely, and every load pulls the real data from Firestore instead. That's
+// what keeps real customer names/phones/emails out of a public GitHub repo.
+let BASE_MAX_SR = 0; // recomputed in computeWorking() whenever BASE_LEADS changes
+let edits = {};       // { srno(string): { field: value, ... } }
+let newLeads = [];     // full lead objects for leads added in-dashboard
+let editMeta = {};     // { srno(string): { by: name, at: epochMillis } } — last editor per lead
+let noteLogs = {};     // { srno(string): [ {id, date:'YYYY-MM-DD', text, by, at:epochMillis}, ... ] } — dated follow-up notes, append-only history
+let workingLeads = []; // computed = BASE_LEADS merged with edits, plus newLeads
+let APP_CATS = [];
+
+// ---- Identity & role (set only after a real, provisioned login — see handleAuthChange) ----
+let currentUser = '';       // display name shown as "edited by" / note author
+let currentUserEmail = '';
+let currentRole = null;     // 'superadmin' | 'management' | 'sales' | 'viewer' | null (not signed in / no access)
+let currentScope = 'all';   // for role 'sales' only: 'all' or 'own' (own = only leads they generated)
+function isSuperAdmin(){ return currentRole === 'superadmin'; }
+function canManage(){ return currentRole === 'superadmin' || currentRole === 'management'; }
+function canWrite(){ return currentRole === 'superadmin' || currentRole === 'management' || currentRole === 'sales'; }
+function blockedWriteNotice(){ alert("You're signed in as a view-only user — you don't have permission to edit leads. Ask your admin if you need edit access."); }
+
+// ---- Firebase (loaded dynamically so the file still works fully offline) ----
+let fb = null;         // { app, db, auth, doc, setDoc, updateDoc, onSnapshot, deleteField, serverTimestamp, getAuth, ... }
+let boardRef = null;
+let pendingTableRefresh = false;
+
+async function loadFirebase(){
+  try{
+    const [appMod, fs, authMod] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js'),
+      import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js'),
+    ]);
+    const app = appMod.initializeApp(FIREBASE_CONFIG);
+    const db = fs.getFirestore(app);
+    const auth = authMod.getAuth(app);
+    fb = { app, db, auth, doc: fs.doc, setDoc: fs.setDoc, updateDoc: fs.updateDoc, getDoc: fs.getDoc,
+           collection: fs.collection, getDocs: fs.getDocs,
+           onSnapshot: fs.onSnapshot, deleteField: fs.deleteField, serverTimestamp: fs.serverTimestamp,
+           arrayUnion: fs.arrayUnion, arrayRemove: fs.arrayRemove,
+           signInWithEmailAndPassword: authMod.signInWithEmailAndPassword,
+           signOut: authMod.signOut, onAuthStateChanged: authMod.onAuthStateChanged,
+           createUserWithEmailAndPassword: authMod.createUserWithEmailAndPassword,
+           sendPasswordResetEmail: authMod.sendPasswordResetEmail,
+           initializeApp: appMod.initializeApp, deleteApp: appMod.deleteApp, getAuth: authMod.getAuth };
+    boardRef = fb.doc(db, BOARD_COLLECTION, BOARD_DOC);
+    // No anonymous sign-in anymore — access is gated entirely behind a real,
+    // superadmin-provisioned account (see handleAuthChange / the sign-in gate).
+    fb.onAuthStateChanged(auth, handleAuthChange);
+    return true;
+  }catch(err){
+    console.error('Firebase unavailable — falling back to local-only mode:', err);
+    fb = null; boardRef = null;
+    return false;
+  }
+}
+
+// Only the FIRST authenticated, role-approved user to ever open the board (i.e. the
+// doc doesn't exist yet) creates it. A blind setDoc(...,{merge:true}) on every load
+// would replace the whole edits/newLeads/editMeta maps with {} and erase the team's
+// saved data — that was a real bug once; never do that. This only ever fires once,
+// for a brand-new empty deployment.
+async function ensureBoardDocExists(){
+  try{
+    const existing = await fb.getDoc(boardRef);
+    if(!existing.exists()){
+      await fb.setDoc(boardRef, { edits:{}, newLeads:{}, editMeta:{}, noteLogs:{} });
+    }
+  }catch(err){ console.error('Could not verify board doc exists:', err); }
+}
+
+function setSaveState(state, text){
+  const el = $('#saveIndicator');
+  el.className = 'save-indicator ' + state;
+  $('#saveText').textContent = text;
+}
+
+function setLastUpdatedLabel(by, atMillis){
+  const el = $('#lastUpdatedMeta');
+  if(!el) return;
+  if(!by){ el.textContent = ''; return; }
+  const when = atMillis ? new Date(atMillis).toLocaleString() : 'just now';
+  el.textContent = `Last updated by ${by} · ${when}`;
+}
+
+function computeWorking(){
+  BASE_MAX_SR = BASE_LEADS.length ? Math.max(...BASE_LEADS.map(r => Number(r['Sr.no']))) : 0;
+  const applyEdits = row => {
+    const e = edits[String(row['Sr.no'])];
+    return e ? Object.assign({}, row, e) : row;
+  };
+  let all = BASE_LEADS.map(applyEdits).concat(newLeads.map(applyEdits));
+  // A 'sales' user the superadmin has scoped to "own leads only" sees (and every
+  // chart/KPI/export downstream sees) just the leads attributed to them — set once
+  // per user in the Super Admin panel, not something the user can change themselves.
+  if(currentRole === 'sales' && currentScope === 'own' && currentUser){
+    const mine = currentUser.trim().toLowerCase();
+    all = all.filter(r => (r['Lead Generated By'] || '').trim().toLowerCase() === mine);
+  }
+  workingLeads = all;
+}
+
+// ============ Persistence ============
+function saveLocalFallback(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ baseLeads: BASE_LEADS, edits, newLeads, editMeta, noteLogs }));
+  }catch(err){ console.error('Local save failed:', err); }
+}
+
+function loadLocalFallback(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed.baseLeads) && parsed.baseLeads.length) BASE_LEADS = parsed.baseLeads;
+      edits = parsed.edits || {};
+      newLeads = parsed.newLeads || [];
+      editMeta = parsed.editMeta || {};
+      noteLogs = parsed.noteLogs || {};
+    }
+  }catch(err){ console.error('Local load failed:', err); }
+}
+
+async function writeToFirestore(patch){
+  if(!fb || !boardRef) return false;
+  try{
+    await fb.updateDoc(boardRef, Object.assign({
+      lastUpdatedBy: currentUser || 'Teammate',
+      lastUpdatedAt: fb.serverTimestamp(),
+    }, patch));
+    return true;
+  }catch(err){
+    console.error('Firestore write failed:', err);
+    return false;
+  }
+}
+
+async function commitField(srno, field, value){
+  if(!canWrite()){ blockedWriteNotice(); return; }
+  const key = String(srno);
+  if(!edits[key]) edits[key] = {};
+  edits[key][field] = value;
+  editMeta[key] = { by: currentUser || 'Teammate', at: Date.now() };
+  computeWorking();
+  saveLocalFallback();
+  if(fb && boardRef){
+    setSaveState('saving', 'Saving…');
+    const ok = await writeToFirestore({
+      [`edits.${key}.${field}`]: value,
+      [`editMeta.${key}`]: { by: currentUser || 'Teammate', at: fb.serverTimestamp() },
+    });
+    setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+  } else {
+    setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+}
+
+async function commitNewLead(rec){
+  if(!canWrite()){ blockedWriteNotice(); return; }
+  const key = String(rec['Sr.no']);
+  editMeta[key] = { by: currentUser || 'Teammate', at: Date.now() };
+  saveLocalFallback();
+  if(fb && boardRef){
+    setSaveState('saving', 'Saving…');
+    const ok = await writeToFirestore({
+      [`newLeads.${key}`]: rec,
+      [`editMeta.${key}`]: { by: currentUser || 'Teammate', at: fb.serverTimestamp() },
+    });
+    setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+  } else {
+    setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+}
+
+async function commitDeleteLead(srno){
+  if(!canWrite()){ blockedWriteNotice(); return; }
+  const key = String(srno);
+  delete editMeta[key];
+  saveLocalFallback();
+  if(fb && boardRef){
+    setSaveState('saving', 'Saving…');
+    const ok = await writeToFirestore({
+      [`newLeads.${key}`]: fb.deleteField(),
+      [`edits.${key}`]: fb.deleteField(),
+      [`editMeta.${key}`]: fb.deleteField(),
+    });
+    setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+  } else {
+    setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+}
+
+function setField(srno, field, value){
+  commitField(srno, field, value);
+}
+
+// ============ Dated follow-up notes (append-only history per lead) ============
+function todayISO(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function notesFor(srno){
+  return (noteLogs[String(srno)] || []).slice().sort((a,b) => {
+    return (b.date||'').localeCompare(a.date||'') || (b.at||0) - (a.at||0);
+  });
+}
+// "No. of Follow-ups" and "Last Follow-up Date" are deliberately DERIVED from the
+// dated notes log rather than separate manually-typed fields — the notes log is
+// already the real record of every follow-up, so a second hand-maintained copy
+// would just drift out of sync with it over time.
+function followupCountFor(srno){
+  return notesFor(srno).length;
+}
+function lastFollowupDateFor(srno){
+  const list = notesFor(srno);
+  return list.length ? list[0].date : '';
+}
+
+async function addNoteEntry(srno, dateStr, text, nextFollowUpDate){
+  if(!canWrite()){ blockedWriteNotice(); return null; }
+  const key = String(srno);
+  // The note records what the next follow-up was scheduled to when it was logged
+  // (a historical snapshot); the lead's own "Next Follow-up Date" field is kept in
+  // sync with it too, since THAT field is what the Follow-Up Activity section's
+  // Overdue / Due-Soon lists actually read from — this is the "link" between them.
+  const entry = { id: `${Date.now()}_${Math.random().toString(36).slice(2,8)}`, date: dateStr || todayISO(), text, by: currentUser || 'Teammate', at: Date.now(), nextFollowUp: nextFollowUpDate || '' };
+  noteLogs[key] = (noteLogs[key] || []).concat([entry]);
+  editMeta[key] = { by: currentUser || 'Teammate', at: Date.now() };
+  if(!edits[key]) edits[key] = {};
+  edits[key]['Next Follow-up Date'] = nextFollowUpDate || '';
+  computeWorking();
+  saveLocalFallback();
+  if(fb && boardRef){
+    setSaveState('saving', 'Saving…');
+    const ok = await writeToFirestore({
+      [`noteLogs.${key}`]: fb.arrayUnion(entry),
+      [`edits.${key}.Next Follow-up Date`]: nextFollowUpDate || '',
+      [`editMeta.${key}`]: { by: currentUser || 'Teammate', at: fb.serverTimestamp() },
+    });
+    setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+  } else {
+    setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+  return entry;
+}
+
+async function deleteNoteEntry(srno, entry){
+  if(!canWrite()){ blockedWriteNotice(); return; }
+  const key = String(srno);
+  noteLogs[key] = (noteLogs[key] || []).filter(e => e.id !== entry.id);
+  saveLocalFallback();
+  if(fb && boardRef){
+    setSaveState('saving', 'Saving…');
+    const ok = await writeToFirestore({ [`noteLogs.${key}`]: fb.arrayRemove(entry) });
+    setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+  } else {
+    setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+}
+
+let currentNotesSrno = null;
+function renderNotesHistory(srno){
+  const list = notesFor(srno);
+  const legacyText = (() => {
+    const wl = workingLeads.find(x => String(x['Sr.no']) === String(srno));
+    return wl ? (wl['Notes'] || '').trim() : '';
+  })();
+  const box = $('#notesHistoryList');
+  if(!list.length && !legacyText){
+    box.innerHTML = `<div class="notes-empty-hint">No notes yet — add the first one above.</div>`;
+    return;
+  }
+  let html = list.map(entry => {
+    const dateLabel = entry.date ? new Date(entry.date + 'T00:00:00').toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'}) : '—';
+    const nextLabel = entry.nextFollowUp ? new Date(entry.nextFollowUp + 'T00:00:00').toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'}) : '';
+    return `
+      <div class="note-entry" data-id="${entry.id}">
+        <div class="note-entry-head">
+          <div><span class="note-date">${dateLabel}</span><span class="note-by">— ${escapeHtml(entry.by || 'Teammate')}</span></div>
+          ${canWrite() ? `<button class="icon-btn danger note-del" data-id="${entry.id}" title="Delete this note">✕</button>` : ''}
+        </div>
+        <div class="note-text">${escapeHtml(entry.text)}</div>
+        ${nextLabel ? `<div style="font-size:11px; color:var(--amber); margin-top:6px; font-family:var(--font-mono);">📅 Next follow-up set to ${nextLabel}</div>` : ''}
+      </div>`;
+  }).join('');
+  if(legacyText){
+    html += `
+      <div class="note-entry legacy">
+        <div class="note-entry-head">
+          <div><span class="note-date">Earlier note</span><span class="note-by">— before dated notes</span></div>
+        </div>
+        <div class="note-text">${escapeHtml(legacyText)}</div>
+      </div>`;
+  }
+  box.innerHTML = html;
+  box.querySelectorAll('.note-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const entry = (noteLogs[String(currentNotesSrno)] || []).find(e => e.id === id);
+      if(!entry) return;
+      if(!confirm('Delete this note? This cannot be undone.')) return;
+      deleteNoteEntry(currentNotesSrno, entry).then(() => {
+        renderNotesHistory(currentNotesSrno);
+        refreshNotesButton(currentNotesSrno);
+      });
+    });
+  });
+}
+
+function refreshNotesButton(srno){
+  const tr = document.querySelector(`#leadsBody tr[data-sr="${srno}"]`);
+  if(!tr) return;
+  const btn = tr.querySelector('.notes-btn');
+  if(!btn) return;
+  const wl = workingLeads.find(x => String(x['Sr.no']) === String(srno));
+  btn.outerHTML = notesCellHtml(wl || {'Sr.no': srno, Notes:''});
+  const newBtn = tr.querySelector('.notes-btn');
+  if(newBtn) newBtn.addEventListener('click', () => openNotesModal(srno));
+}
+
+function openNotesModal(srno){
+  currentNotesSrno = srno;
+  const wl = workingLeads.find(x => String(x['Sr.no']) === String(srno));
+  const label = wl ? [wl['Company Name'], wl['Visitor Name']].filter(Boolean).join(' — ') : `Lead #${srno}`;
+  $('#notesModalSub').textContent = label || `Lead #${srno}`;
+  $('#noteDateInput').value = todayISO();
+  $('#noteTextInput').value = '';
+  $('#noteNextFollowUpInput').value = (wl && wl['Next Follow-up Date']) || '';
+  $('#addNoteSection').style.display = canWrite() ? '' : 'none';
+  renderNotesHistory(srno);
+  $('#notesModal').classList.add('open');
+  if(canWrite()) $('#noteTextInput').focus();
+}
+function closeNotesModal(){
+  $('#notesModal').classList.remove('open');
+  currentNotesSrno = null;
+}
+$('#closeNotesBtn').addEventListener('click', closeNotesModal);
+$('#notesModal').addEventListener('click', (e) => { if(e.target.id === 'notesModal') closeNotesModal(); });
+$('#addNoteBtn').addEventListener('click', () => {
+  const text = $('#noteTextInput').value.trim();
+  if(!text) return;
+  const date = $('#noteDateInput').value || todayISO();
+  const nextFollowUp = $('#noteNextFollowUpInput').value || '';
+  const srno = currentNotesSrno;
+  addNoteEntry(srno, date, text, nextFollowUp).then(() => {
+    $('#noteTextInput').value = '';
+    $('#noteTextInput').focus();
+    renderNotesHistory(srno);
+    refreshNotesButton(srno);
+    // keep the inline table's own Next Follow-up Date cell in sync, and refresh
+    // the Follow-Up Activity KPIs since Overdue/Due-Soon may have just changed
+    const tr = document.querySelector(`#leadsBody tr[data-sr="${srno}"]`);
+    const dateCell = tr ? tr.querySelector('[data-field="Next Follow-up Date"]') : null;
+    if(dateCell) dateCell.value = nextFollowUp;
+    renderFollowUpKPIs();
+  });
+});
+$('#noteTextInput').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); $('#addNoteBtn').click(); }
+});
+
+// Autosave heartbeat: while a cell is actively focused (not yet blurred),
+// push its current value every 10s so nothing is lost mid-edit.
+setInterval(() => {
+  const active = document.activeElement;
+  if(active && active.matches && active.matches('#leadsBody [data-field]')){
+    const tr = active.closest('tr');
+    if(!tr) return;
+    const srno = tr.dataset.sr, field = active.dataset.field;
+    const wl = workingLeads.find(x => String(x['Sr.no']) === srno);
+    if(!wl) return;
+    if(field === 'Lead Value'){
+      // Deliberately NOT autosaved while typing: unlike text fields, a partial
+      // number typed so far (e.g. "12" on the way to "1,25,000") is itself a
+      // valid-looking number, not obviously incomplete — auto-committing it would
+      // sync a wildly wrong figure into every teammate's KPI totals and any
+      // export run during that window. Only commit Lead Value on blur, once the
+      // user is actually done editing it.
+      return;
+    } else if(String(wl[field] ?? '') !== active.value){
+      setField(srno, field, active.value);
+    }
+  }
+}, AUTOSAVE_INTERVAL_MS);
+
+function renderPreservingFocus(){
+  renderKPIs(); renderCharts(); renderMatrix(); renderInsight(); refreshFilterOptions();
+  const active = document.activeElement;
+  const isEditingCell = active && active.closest && active.closest('#leadsBody');
+  if(isEditingCell){
+    pendingTableRefresh = true;
+  } else {
+    applyFilters();
+  }
+}
+
+let hasSyncedOnce = false;
+let boardHasBaseLeads = false; // becomes true once Firestore actually holds the seed dataset
+function startRealtimeSync(){
+  setSaveState('saving', 'Connecting…');
+  fb.onSnapshot(boardRef, snap => {
+    if(!snap.exists()){ hasSyncedOnce = true; return; }
+    const data = snap.data();
+    // The seed dataset itself now lives ONLY in Firestore (never embedded in this
+    // public HTML) — once migrated, every load pulls it from here.
+    boardHasBaseLeads = Array.isArray(data.baseLeads) && data.baseLeads.length > 0;
+    if(boardHasBaseLeads) BASE_LEADS = data.baseLeads;
+    edits = data.edits || {};
+    newLeads = Object.values(data.newLeads || {});
+    editMeta = {};
+    Object.entries(data.editMeta || {}).forEach(([k, v]) => {
+      editMeta[k] = { by: v && v.by, at: v && v.at && v.at.toMillis ? v.at.toMillis() : (v && v.at) || null };
+    });
+    noteLogs = {};
+    Object.entries(data.noteLogs || {}).forEach(([k, arr]) => {
+      noteLogs[k] = (arr || []).map(e => ({ ...e, at: e && e.at && e.at.toMillis ? e.at.toMillis() : (e && e.at) || null }));
+    });
+    computeWorking();
+    saveLocalFallback();
+    const atMillis = data.lastUpdatedAt && data.lastUpdatedAt.toMillis ? data.lastUpdatedAt.toMillis() : null;
+    setLastUpdatedLabel(data.lastUpdatedBy, atMillis);
+    renderPreservingFocus();
+    if(currentNotesSrno != null && $('#notesModal').classList.contains('open')){
+      renderNotesHistory(currentNotesSrno);
+    }
+    hasSyncedOnce = true;
+    setSaveState('live', 'Synced to team');
+  }, err => {
+    console.error('Realtime sync error:', err);
+    setSaveState('offline', 'Sync error — check Firestore rules');
+  });
+}
+
+$('#leadsBody').addEventListener('focusout', () => {
+  if(!pendingTableRefresh) return;
+  setTimeout(() => {
+    const active = document.activeElement;
+    if(!active || !active.closest || !active.closest('#leadsBody')){
+      pendingTableRefresh = false;
+      applyFilters();
+    }
+  }, 50);
+});
+
+// ============ KPIs ============
+function renderKPIs(){
+  const total = workingLeads.length;
+  const cardsYes = workingLeads.filter(r => r['Card Collected'] === 'Yes').length;
+  const statesSet = new Set(workingLeads.map(r => r.State).filter(s => s && s !== 'Not Specified'));
+  const dobotInterest = workingLeads.filter(r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth').length;
+  const rexrothInterest = workingLeads.filter(r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth').length;
+  const pending = workingLeads.filter(r => (r['Follow-Up Status'] || 'Not Contacted') === 'Not Contacted').length;
+  const totalValue = workingLeads.reduce((s,r) => s + (Number(r['Lead Value']) || 0), 0);
+  const wonLeads = workingLeads.filter(r => r['Follow-Up Status'] === 'Won');
+  const lostLeads = workingLeads.filter(r => r['Follow-Up Status'] === 'Lost');
+  const openPipeline = workingLeads.filter(r => !CLOSED_STATUSES.includes(r['Follow-Up Status'] || 'Not Contacted'));
+  const wonValue = wonLeads.reduce((s,r) => s + (Number(r['Lead Value']) || 0), 0);
+  const valuedCount = workingLeads.filter(r => Number(r['Lead Value']) > 0).length;
+
+  const kpis = [
+    { label:'Total Leads', value: total, sub:'captured + added', accent:'var(--blue)' },
+    { label:'Won', value: wonLeads.length, sub: fmtPct(wonLeads.length,total) + ' of leads', accent:'var(--green)' },
+    { label:'Lost', value: lostLeads.length, sub: fmtPct(lostLeads.length,total) + ' of leads', accent:'var(--red)' },
+    { label:'Open Pipeline', value: openPipeline.length, sub:'still in progress', accent:'var(--amber)' },
+    { label:'Conversion Rate', value: fmtPct(wonLeads.length,total), sub:'won ÷ total leads', accent:'var(--green)' },
+    { label:'Cards Collected', value: cardsYes, sub: fmtPct(cardsYes,total) + ' of leads', accent:'var(--green)' },
+    { label:'States Reached', value: statesSet.size, sub:'geographic spread', accent:'var(--amber)' },
+    { label:'Dobot Interest', value: dobotInterest, sub: fmtPct(dobotInterest,total) + ' of leads', accent:'var(--amber)' },
+    { label:'Rexroth Interest', value: rexrothInterest, sub: fmtPct(rexrothInterest,total) + ' of leads', accent:'var(--blue)' },
+    { label:'Follow-Up Pending', value: pending, sub: fmtPct(pending,total) + ' not contacted', accent:'var(--red)' },
+    { label:'Total Lead Value', value: '₹' + (formatINR(totalValue) || '0'), sub: `${valuedCount} leads valued`, accent:'var(--green)', currency:true },
+    { label:'Won Value', value: '₹' + (formatINR(wonValue) || '0'), sub: `${wonLeads.length} won leads`, accent:'var(--green)', currency:true },
+  ];
+  $('#kpiRow').innerHTML = kpis.map(k => `
+    <div class="kpi" style="--accent:${k.accent}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value${k.currency ? ' currency' : ''}" title="${k.currency ? String(k.value).replace(/&/g,'&amp;') : ''}">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  renderFollowUpKPIs();
+}
+
+// ============ Follow-Up Activity ============
+function renderFollowUpKPIs(){
+  const todayStr = todayISO();
+  const in3DaysStr = (() => {
+    const d = new Date(); d.setDate(d.getDate() + 3);
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  })();
+  const totalFollowUps = workingLeads.reduce((s,r) => s + notesFor(r['Sr.no']).length, 0);
+  const openLeadsWithNext = workingLeads.filter(r => r['Next Follow-up Date'] && !CLOSED_STATUSES.includes(r['Follow-Up Status'] || 'Not Contacted'));
+  const overdue = openLeadsWithNext.filter(r => r['Next Follow-up Date'] < todayStr);
+  const dueSoon = openLeadsWithNext.filter(r => r['Next Follow-up Date'] >= todayStr && r['Next Follow-up Date'] <= in3DaysStr);
+  const closed = workingLeads.filter(r => r['Next Follow-up Date'] && CLOSED_STATUSES.includes(r['Follow-Up Status'] || 'Not Contacted'));
+
+  const kpis = [
+    { label:'Total Follow-Ups Logged', value: totalFollowUps, sub:'dated notes across all leads', accent:'var(--blue)' },
+    { label:'Open Follow-Ups', value: openLeadsWithNext.length, sub:'leads with a next date set', accent:'var(--amber)' },
+    { label:'Overdue', value: overdue.length, sub:'next follow-up date has passed', accent:'var(--red)' },
+    { label:'Due In Next 3 Days', value: dueSoon.length, sub:`by ${in3DaysStr}`, accent:'var(--amber)' },
+    { label:'Closed Follow-Ups', value: closed.length, sub:'lead already won/lost/not relevant', accent:'var(--green)' },
+  ];
+  $('#followUpKpiRow').innerHTML = kpis.map(k => `
+    <div class="kpi" style="--accent:${k.accent}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  // The list itself — this is the actual link between notes and next-follow-up
+  // dates: each row shows the lead's latest note right next to when it's due,
+  // and clicking it opens the same Notes modal used to log/reschedule it.
+  const followUpItemHtml = (r, isOverdue) => {
+    const latest = notesFor(r['Sr.no'])[0];
+    const dateLabel = new Date(r['Next Follow-up Date'] + 'T00:00:00').toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    const days = Math.round((new Date(todayStr) - new Date(r['Next Follow-up Date'])) / 86400000);
+    const badge = isOverdue
+      ? `<span class="followup-badge overdue">${days} day${days===1?'':'s'} overdue</span>`
+      : `<span class="followup-badge soon">${days<=0?'today':days===1?'tomorrow':`in ${days} days`}</span>`;
+    return `
+      <div class="followup-item" data-sr="${r['Sr.no']}">
+        <div class="followup-item-main">
+          <div class="followup-item-company">${escapeHtml(r['Company Name']) || `Lead #${r['Sr.no']}`}</div>
+          <div class="followup-item-note">${latest ? escapeHtml(latest.text) : '<span style="color:var(--text-faint); font-style:italic;">No notes logged yet</span>'}</div>
+        </div>
+        <div class="followup-item-meta">
+          <div class="followup-item-date">${dateLabel}</div>
+          ${badge}
+        </div>
+      </div>`;
+  };
+  const sortedOverdue = overdue.slice().sort((a,b) => a['Next Follow-up Date'].localeCompare(b['Next Follow-up Date']));
+  const sortedDueSoon = dueSoon.slice().sort((a,b) => a['Next Follow-up Date'].localeCompare(b['Next Follow-up Date']));
+  const listBox = $('#followUpList');
+  if(!sortedOverdue.length && !sortedDueSoon.length){
+    listBox.innerHTML = '';
+  } else {
+    listBox.innerHTML =
+      (sortedOverdue.length ? `<div class="followup-group-title">⚠ Overdue (${sortedOverdue.length})</div>${sortedOverdue.map(r=>followUpItemHtml(r,true)).join('')}` : '') +
+      (sortedDueSoon.length ? `<div class="followup-group-title" style="margin-top:${sortedOverdue.length?'14px':'0'};">Due Soon (${sortedDueSoon.length})</div>${sortedDueSoon.map(r=>followUpItemHtml(r,false)).join('')}` : '');
+    listBox.querySelectorAll('.followup-item').forEach(el => {
+      el.addEventListener('click', () => openNotesModal(el.dataset.sr));
+    });
+  }
+}
+
+// ============ Bar charts ============
+function countBy(arr, key){
+  const m = {};
+  arr.forEach(r => { const k = r[key] || 'Not Specified'; m[k] = (m[k]||0)+1; });
+  return m;
+}
+function renderBars(container, dataObj, color, order){
+  let entries = Object.entries(dataObj);
+  entries = order ? order.filter(k => dataObj[k]).map(k => [k, dataObj[k]]) : entries.sort((a,b)=>b[1]-a[1]);
+  const max = entries.length ? Math.max(...entries.map(e=>e[1])) : 1;
+  container.innerHTML = entries.map(([label, val]) => `
+    <div class="bar-row">
+      <div class="bar-label" title="${label}">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(val/max*100).toFixed(1)}%; background:${color};"></div></div>
+      <div class="bar-val">${val}</div>
+    </div>`).join('');
+}
+function renderCharts(){
+  const stateCounts = countBy(workingLeads, 'State');
+  const appCounts = countBy(workingLeads, 'Application Category');
+  const statusCounts = countBy(workingLeads, 'Follow-Up Status');
+  APP_CATS = Object.entries(appCounts).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  renderBars($('#stateChart'), stateCounts, 'var(--blue)');
+  renderBars($('#appChart'), appCounts, 'var(--amber)');
+  const statusColors = {'Not Contacted':'var(--text-faint)','Contacted':'var(--blue)','Meeting Scheduled':'var(--amber)',
+                         'Quotation Sent':'#c9a4f0','Won':'var(--green)','Lost':'var(--red)','Not Relevant':'var(--text-faint)'};
+  const statusOrdered = STATUS_OPTIONS.filter(s => statusCounts[s]);
+  const box = $('#statusChart');
+  box.innerHTML = statusOrdered.map(label => {
+    const val = statusCounts[label];
+    const max = Math.max(...statusOrdered.map(s=>statusCounts[s]));
+    return `<div class="bar-row">
+      <div class="bar-label" title="${label}">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(val/max*100).toFixed(1)}%; background:${statusColors[label]||'var(--blue)'};"></div></div>
+      <div class="bar-val">${val}</div>
+    </div>`;
+  }).join('');
+
+  renderPipelineHealthCharts();
+}
+
+// ============ Pipeline Health: Lead Quality, Inquiry Source, Brand Comparison ============
+function renderPipelineHealthCharts(){
+  const qualityCounts = countBy(workingLeads, 'Lead Quality');
+  renderBars($('#qualityChart'), qualityCounts, 'var(--amber)');
+  const sourceCounts = countBy(workingLeads, 'Inquiry Source');
+  renderBars($('#sourceChart'), sourceCounts, 'var(--blue)');
+
+  const brands = [
+    ['Rexroth', r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth'],
+    ['Dobot', r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth'],
+  ];
+  const rows = brands.map(([name, match]) => {
+    const leads = workingLeads.filter(match);
+    return { name, total: leads.length,
+      won: leads.filter(r => r['Follow-Up Status'] === 'Won').length,
+      lost: leads.filter(r => r['Follow-Up Status'] === 'Lost').length };
+  });
+  $('#brandChart').innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead><tr>
+        <th style="text-align:left; padding:6px 4px; color:var(--text-dim); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Brand</th>
+        <th style="text-align:right; padding:6px 4px; color:var(--text-dim); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Total</th>
+        <th style="text-align:right; padding:6px 4px; color:var(--green); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Won</th>
+        <th style="text-align:right; padding:6px 4px; color:var(--red); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Lost</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td style="padding:8px 4px; color:var(--text); border-bottom:1px solid var(--line-soft);">${r.name}</td>
+          <td style="padding:8px 4px; text-align:right; font-family:var(--font-mono); color:var(--text-dim); border-bottom:1px solid var(--line-soft);">${r.total}</td>
+          <td style="padding:8px 4px; text-align:right; font-family:var(--font-mono); color:var(--green); border-bottom:1px solid var(--line-soft);">${r.won}</td>
+          <td style="padding:8px 4px; text-align:right; font-family:var(--font-mono); color:var(--red); border-bottom:1px solid var(--line-soft);">${r.lost}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ============ Matrix ============
+function buildMatrix(groupKey){
+  const groups = {};
+  workingLeads.forEach(r => {
+    const g = r[groupKey] || 'Not Specified';
+    if(!groups[g]) groups[g] = {};
+    const a = r['Application Category'] || 'Not Specified';
+    groups[g][a] = (groups[g][a]||0) + 1;
+  });
+  const groupTotals = Object.entries(groups).map(([g,m]) => [g, Object.values(m).reduce((a,b)=>a+b,0)]);
+  groupTotals.sort((a,b) => b[1]-a[1]);
+
+  let maxCell = 0;
+  groupTotals.forEach(([g]) => APP_CATS.forEach(a => { maxCell = Math.max(maxCell, groups[g][a]||0); }));
+
+  let html = '<table class="matrix"><thead><tr><th class="rowhead">' + groupKey.toUpperCase() + '</th>';
+  APP_CATS.forEach(a => html += `<th>${a}</th>`);
+  html += '<th class="total">Total</th></tr></thead><tbody>';
+
+  groupTotals.forEach(([g, gtotal]) => {
+    html += `<tr><td class="rowhead">${g}</td>`;
+    APP_CATS.forEach(a => {
+      const v = groups[g][a] || 0;
+      const alpha = maxCell ? (v / maxCell) : 0;
+      const bg = v === 0 ? 'transparent' : `rgba(74,144,217,${(0.12 + alpha*0.55).toFixed(2)})`;
+      const cls = v === 0 ? 'cell zero' : 'cell';
+      html += `<td class="${cls}" style="background:${bg}" data-group="${g}" data-groupkey="${groupKey}" data-app="${a}">${v || '·'}</td>`;
+    });
+    html += `<td class="total">${gtotal}</td></tr>`;
+  });
+
+  html += '<tr><td class="rowhead total">Total</td>';
+  APP_CATS.forEach(a => {
+    const colTotal = groupTotals.reduce((s,[g]) => s + (groups[g][a]||0), 0);
+    html += `<td class="total">${colTotal}</td>`;
+  });
+  html += `<td class="total">${workingLeads.length}</td></tr>`;
+  html += '</tbody></table>';
+  return html;
+}
+
+let currentMatrixMode = 'state';
+function renderMatrix(){
+  $('#matrixHolder').innerHTML = buildMatrix(currentMatrixMode === 'state' ? 'State' : 'City');
+  document.querySelectorAll('#matrixHolder td.cell').forEach(td => {
+    td.addEventListener('click', () => {
+      const group = td.dataset.group, groupKey = td.dataset.groupkey, app = td.dataset.app;
+      if(groupKey === 'State'){ $('#stateFilter').value = group; $('#cityFilter').value=''; }
+      else { $('#cityFilter').value = group; $('#stateFilter').value=''; }
+      $('#appFilter').value = app;
+      applyFilters();
+      const sections = document.querySelectorAll('.section');
+      const lastSection = sections[sections.length-1];
+      if(lastSection && typeof lastSection.scrollIntoView === 'function'){
+        lastSection.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    });
+  });
+}
+document.querySelectorAll('#matrixToggle button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#matrixToggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMatrixMode = btn.dataset.mode;
+    renderMatrix();
+  });
+});
+
+// ============ Insight ============
+function renderInsight(){
+  const total = workingLeads.length;
+  if(!total){
+    // Legitimately empty before login (or right after, before the first Firestore
+    // sync lands) now that the seed dataset isn't embedded in this file anymore —
+    // this must render something sane rather than crash on missing data.
+    $('#insightBox').innerHTML = `<b>No leads loaded yet.</b> Sign in to load the live board.`;
+    return;
+  }
+  const stateCounts = countBy(workingLeads, 'State');
+  const appCounts = countBy(workingLeads, 'Application Category');
+  const topState = Object.entries(stateCounts).sort((a,b)=>b[1]-a[1])[0];
+  const topApp = Object.entries(appCounts).filter(([k])=>k!=='Not Specified').sort((a,b)=>b[1]-a[1])[0];
+  const unspecifiedApp = appCounts['Not Specified'] || 0;
+  const pending = workingLeads.filter(r => (r['Follow-Up Status']||'Not Contacted') === 'Not Contacted').length;
+  $('#insightBox').innerHTML =
+    `<b>${topState ? topState[0] : 'n/a'}</b> accounts for the largest share of leads${topState ? ` (${topState[1]} of ${total})` : ''}, and ` +
+    `<b>${topApp ? topApp[0] : 'n/a'}</b> is the leading application interest${topApp ? ` (${topApp[1]} leads)` : ''}. ` +
+    `${unspecifiedApp} leads (${fmtPct(unspecifiedApp,total)}) had no application recorded at the booth. ` +
+    `<b>${pending}</b> leads (${fmtPct(pending,total)}) are still awaiting first contact.`;
+}
+
+// ============ Filters + editable table ============
+function uniqueSorted(key){ return [...new Set(workingLeads.map(r => r[key]).filter(Boolean))].sort(); }
+function fillSelect(sel, values, placeholder){
+  sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v=>`<option value="${v}">${v}</option>`).join('');
+}
+function refreshFilterOptions(){
+  const keepState = $('#stateFilter').value, keepCity = $('#cityFilter').value, keepApp = $('#appFilter').value,
+        keepProd = $('#productFilter').value, keepStatus = $('#statusFilter').value;
+  fillSelect($('#stateFilter'), uniqueSorted('State'), 'All States');
+  fillSelect($('#cityFilter'), uniqueSorted('City'), 'All Cities');
+  fillSelect($('#appFilter'), APP_CATS, 'All Applications');
+  fillSelect($('#productFilter'), uniqueSorted('Product Interest'), 'All Products');
+  fillSelect($('#statusFilter'), STATUS_OPTIONS, 'Status: Any');
+  $('#stateFilter').value = keepState; $('#cityFilter').value = keepCity; $('#appFilter').value = keepApp;
+  $('#productFilter').value = keepProd; $('#statusFilter').value = keepStatus;
+}
+
+function productTag(p){
+  if(p === 'Dobot') return `<span class="tag tag-dobot">Dobot</span>`;
+  if(p === 'Rexroth') return `<span class="tag tag-rexroth">Rexroth</span>`;
+  if(p === 'Dobot + Rexroth') return `<span class="tag tag-both">Dobot+Rexroth</span>`;
+  if(p === 'Vision System') return `<span class="tag tag-other">Vision</span>`;
+  return `<span class="tag tag-other">${p || '—'}</span>`;
+}
+function slug(s){ return String(s).replace(/[^a-zA-Z]/g,'-'); }
+
+function draftBody(row){
+  const appLine = row['Application (as recorded)'] || (row['Application Category'] !== 'Not Specified' ? row['Application Category'] : 'your enquiry');
+  const subject = `Following up on your enquiry — ${row['Application Category'] !== 'Not Specified' ? row['Application Category'] : 'Exhibition'}`;
+  const body = `Hi ${row['Visitor Name'] || 'there'},\n\nThank you for stopping by our booth and for your interest in ${appLine}.\n\nI'd like to follow up and understand your requirement better — would you have a few minutes for a call this week?\n\nBest regards,`;
+  return {subject, body};
+}
+function draftText(row){
+  const {subject, body} = draftBody(row);
+  return `To: ${row['Email ID'] || '(no email on file)'}\nSubject: ${subject}\n\n${body}`;
+}
+function mailtoFor(row){
+  if(!row['Email ID']) return null;
+  const {subject, body} = draftBody(row);
+  return `mailto:${row['Email ID']}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+let lastFiltered = [];
+function applyFilters(){
+  const q = $('#searchBox').value.trim().toLowerCase();
+  const st = $('#stateFilter').value, ci = $('#cityFilter').value, ap = $('#appFilter').value,
+        pr = $('#productFilter').value, su = $('#statusFilter').value;
+
+  const filtered = workingLeads.filter(r => {
+    if(st && r.State !== st) return false;
+    if(ci && r.City !== ci) return false;
+    if(ap && r['Application Category'] !== ap) return false;
+    if(pr && r['Product Interest'] !== pr) return false;
+    if(su && (r['Follow-Up Status']||'Not Contacted') !== su) return false;
+    if(q){
+      const hay = [r['Company Name'], r['Visitor Name'], r.City, r.State, r['Email ID'], r['Application (as recorded)']]
+        .join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  $('#resultCount').textContent = `${filtered.length} / ${workingLeads.length} leads`;
+  lastFiltered = filtered;
+  $('#leadsBody').innerHTML = filtered.map(r => rowHtml(r)).join('');
+  wireRowEvents();
+}
+
+$('#copyAllBtn').addEventListener('click', () => {
+  const withEmail = lastFiltered.filter(r => r['Email ID']);
+  if(!withEmail.length){ alert('No leads with an email address in the current filter.'); return; }
+  const text = withEmail.map(r => draftText(r)).join('\n\n' + '—'.repeat(40) + '\n\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = $('#copyAllBtn');
+    const orig = btn.textContent;
+    btn.textContent = `✓ COPIED ${withEmail.length} DRAFTS`;
+    setTimeout(() => { btn.textContent = orig; }, 1600);
+  }).catch(() => alert('Could not copy — your browser may be blocking clipboard access.'));
+});
+
+function srCellHtml(srno){
+  const isNew = Number(srno) > BASE_MAX_SR;
+  const meta = editMeta[String(srno)];
+  const metaLine = meta && meta.by ? `<span class="edited-by" title="${meta.at ? new Date(meta.at).toLocaleString() : ''}">✎ ${meta.by}</span>` : '';
+  return `${srno}${isNew ? ' <span style="color:var(--green); font-size:9px;">NEW</span>' : ''}${metaLine}`;
+}
+
+function notesCellHtml(r){
+  const srno = r['Sr.no'];
+  const list = notesFor(srno);
+  const legacyText = (r['Notes'] || '').trim();
+  if(!list.length && !legacyText){
+    return `<button class="notes-btn empty" data-sr="${srno}" title="Add a dated follow-up note">+ Add note</button>`;
+  }
+  const latest = list[0];
+  const preview = latest ? latest.text : legacyText;
+  const dateLabel = latest && latest.date ? new Date(latest.date + 'T00:00:00').toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '';
+  const count = list.length + (legacyText ? 1 : 0);
+  const nextLabel = r['Next Follow-up Date'] ? new Date(r['Next Follow-up Date'] + 'T00:00:00').toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '';
+  return `<button class="notes-btn" data-sr="${srno}" title="View / add dated notes">` +
+    `<span class="notes-preview-line"><span class="notes-count">${count}</span>${dateLabel ? escapeHtml(dateLabel) + ' — ' : ''}${escapeHtml(preview)}</span>` +
+    `${nextLabel ? `<span class="notes-next-followup">📅 next ${escapeHtml(nextLabel)}</span>` : ''}</button>`;
+}
+
+function rowHtml(r){
+  const isNew = Number(r['Sr.no']) > BASE_MAX_SR;
+  const mailto = mailtoFor(r);
+  const status = r['Follow-Up Status'] || 'Not Contacted';
+  return `
+    <tr class="${isNew ? 'new-row' : ''}" data-sr="${r['Sr.no']}">
+      <td data-label="#">${srCellHtml(r['Sr.no'])}</td>
+      <td data-label="Enquiry No"><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></td>
+      <td data-label="Company"><input class="cell-input" data-field="Company Name" value="${(r['Company Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
+      <td data-label="Visitor"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
+      <td data-label="State">${r.State}</td>
+      <td data-label="City">${r.City}</td>
+      <td data-label="Application">${r['Application Category']}${r['Application (as recorded)'] ? ` <span style="color:var(--text-faint)">(${r['Application (as recorded)']})</span>` : ''}</td>
+      <td data-label="Product">${productTag(r['Product Interest'])}</td>
+      <td data-label="Email"><input class="cell-input" type="email" data-field="Email ID" value="${(r['Email ID']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Email ID']||'').replace(/"/g,'&quot;')}" style="min-width:190px;"></td>
+      <td data-label="Phone"><input class="cell-input" type="tel" data-field="Phone No." value="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" style="min-width:130px;"></td>
+      <td data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status">
+            ${STATUS_OPTIONS.map(s=>`<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
+          </select></td>
+      <td data-label="Quality"><select class="cell-input" data-field="Lead Quality">
+            <option value="" ${!r['Lead Quality']?'selected':''}>—</option>
+            ${LEAD_QUALITY_OPTIONS.map(q=>`<option value="${q}" ${q===r['Lead Quality']?'selected':''}>${q}</option>`).join('')}
+          </select></td>
+      <td data-label="Source"><select class="cell-input" data-field="Inquiry Source">
+            <option value="" ${!r['Inquiry Source']?'selected':''}>—</option>
+            ${INQUIRY_SOURCE_OPTIONS.map(s=>`<option value="${s}" ${s===r['Inquiry Source']?'selected':''}>${s}</option>`).join('')}
+          </select></td>
+      <td data-label="Lead Type"><select class="cell-input" data-field="Lead Type">
+            <option value="" ${!r['Lead Type']?'selected':''}>—</option>
+            ${LEAD_TYPE_OPTIONS.map(s=>`<option value="${s}" ${s===r['Lead Type']?'selected':''}>${s}</option>`).join('')}
+          </select></td>
+      <td data-label="Moved to SourcePro"><select class="cell-input" data-field="Moved to SourcePro">
+            <option value="" ${!r['Moved to SourcePro']?'selected':''}>—</option>
+            ${SOURCEPRO_OPTIONS.map(s=>`<option value="${s}" ${s===r['Moved to SourcePro']?'selected':''}>${s}</option>`).join('')}
+          </select></td>
+      <td data-label="Lead Value (₹)"><div class="lead-value-cell"><span class="inr-prefix">₹</span><input class="cell-input" type="text" inputmode="numeric" data-field="Lead Value" value="${formatINR(r['Lead Value'])}" placeholder="0"></div></td>
+      <td data-label="Generated By"><input class="cell-input" data-field="Lead Generated By" value="${(r['Lead Generated By']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
+      <td data-label="Follow-ups" style="text-align:center; color:var(--text-faint); font-family:var(--font-mono);">${followupCountFor(r['Sr.no'])}</td>
+      <td data-label="Last Follow-up" style="color:var(--text-faint); font-family:var(--font-mono); white-space:nowrap;">${lastFollowupDateFor(r['Sr.no']) || '—'}</td>
+      <td data-label="Next Follow-up"><input class="cell-input" type="date" data-field="Next Follow-up Date" value="${r['Next Follow-up Date']||''}" style="min-width:130px;"></td>
+      <td data-label="ERP Lead No"><input class="cell-input" data-field="ERP Lead Number" value="${(r['ERP Lead Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:100px;"></td>
+      <td data-label="Order No"><input class="cell-input" data-field="Order No" value="${(r['Order No']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:100px;"></td>
+      <td data-label="Order Date"><input class="cell-input" type="date" data-field="Order Date" value="${r['Order Date']||''}" style="min-width:130px;"></td>
+      <td data-label="Received"><input class="cell-input" type="date" data-field="Received Date" value="${r['Received Date']||''}" style="min-width:130px;"></td>
+      <td data-label="Notes">${notesCellHtml(r)}</td>
+      <td data-label="Actions">
+        <div class="actions-cell">
+          <a class="icon-btn mail ${mailto ? '' : 'disabled'}" href="${mailto || '#'}" target="_blank" title="Open in mail app">✉</a>
+          <button class="icon-btn draft-btn ${r['Email ID'] ? '' : 'disabled'}" title="Copy draft email (To/Subject/Body)">📋</button>
+          <button class="icon-btn copy-btn ${r['Email ID'] ? '' : 'disabled'}" data-email="${r['Email ID']||''}" title="Copy email address only">⧉</button>
+          ${isNew ? `<button class="icon-btn danger delete-btn" title="Delete this lead">✕</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+}
+
+function wireRowEvents(){
+  document.querySelectorAll('#leadsBody tr').forEach(tr => {
+    const srno = tr.dataset.sr;
+    tr.querySelectorAll('[data-field]').forEach(el => {
+      const evt = el.tagName === 'SELECT' ? 'change' : 'blur';
+      if(el.dataset.field === 'Lead Value'){
+        // Show plain digits while editing (no commas), reformat with Indian
+        // grouping once they're done — keeps the stored value a clean number.
+        // IMPORTANT: do NOT special-case "0" here — a lead can legitimately be
+        // valued at ₹0, and blanking it on focus alone (before any keystroke)
+        // was corrupting/re-attributing that value on every accidental click.
+        // The displayed value always comes from formatINR (clean digits), so
+        // this reparse should never hit the error branch in practice.
+        el.addEventListener('focus', () => {
+          const parsed = parseINR(el.value);
+          el.value = parsed.error ? '' : String(parsed.value);
+        });
+      }
+      el.addEventListener(evt, () => {
+        let valueToSave = el.value;
+        if(el.dataset.field === 'Lead Value'){
+          const parsed = parseINR(el.value);
+          const wlCurrent = workingLeads.find(x => String(x['Sr.no']) === srno);
+          if(parsed.error){
+            alert(parsed.error);
+            el.value = formatINR(wlCurrent ? wlCurrent['Lead Value'] : '');
+            return;
+          }
+          valueToSave = parsed.value;
+          // No-op guard: focusing then blurring without any real edit (e.g. an
+          // accidental click) must never overwrite the stored value or stamp a
+          // new "edited by" attribution.
+          const currentStored = wlCurrent ? wlCurrent['Lead Value'] : '';
+          if(String(currentStored ?? '') === String(valueToSave)){
+            el.value = formatINR(valueToSave);
+            return;
+          }
+        }
+        setField(srno, el.dataset.field, valueToSave);
+        const srCell = tr.querySelector('td:first-child');
+        if(srCell) srCell.innerHTML = srCellHtml(srno);
+        if(el.dataset.field === 'Follow-Up Status'){
+          el.className = 'cell-input status-' + slug(el.value);
+          renderKPIs(); renderCharts(); renderInsight();
+        }
+        if(el.dataset.field === 'Lead Value'){
+          el.value = formatINR(valueToSave);
+          renderKPIs();
+        }
+        if(el.dataset.field === 'Email ID'){
+          const tdActions = tr.querySelector('.actions-cell');
+          const mailBtn = tdActions.querySelector('.mail');
+          const wl = workingLeads.find(x => String(x['Sr.no']) === srno);
+          const link = mailtoFor(wl);
+          if(link){ mailBtn.href = link; mailBtn.classList.remove('disabled'); }
+          else { mailBtn.href = '#'; mailBtn.classList.add('disabled'); }
+          const copyBtn = tdActions.querySelector('.copy-btn');
+          copyBtn.dataset.email = el.value;
+          copyBtn.classList.toggle('disabled', !el.value);
+          const draftBtn = tdActions.querySelector('.draft-btn');
+          draftBtn.classList.toggle('disabled', !el.value);
+        }
+      });
+      el.addEventListener('keydown', (e) => { if(e.key === 'Enter') el.blur(); });
+    });
+    const notesBtn = tr.querySelector('.notes-btn');
+    if(notesBtn){
+      notesBtn.addEventListener('click', () => openNotesModal(srno));
+    }
+    const draftBtn = tr.querySelector('.draft-btn');
+    if(draftBtn){
+      draftBtn.addEventListener('click', () => {
+        const wl = workingLeads.find(x => String(x['Sr.no']) === srno);
+        if(!wl || !wl['Email ID']) return;
+        navigator.clipboard.writeText(draftText(wl)).then(() => {
+          const orig = draftBtn.textContent;
+          draftBtn.textContent = '✓';
+          draftBtn.classList.add('toast-copied');
+          setTimeout(() => { draftBtn.textContent = orig; draftBtn.classList.remove('toast-copied'); }, 1200);
+        }).catch(()=>{});
+      });
+    }
+    const copyBtn = tr.querySelector('.copy-btn');
+    if(copyBtn){
+      copyBtn.addEventListener('click', () => {
+        const email = copyBtn.dataset.email;
+        if(!email) return;
+        navigator.clipboard.writeText(email).then(() => {
+          const orig = copyBtn.textContent;
+          copyBtn.textContent = '✓';
+          copyBtn.classList.add('toast-copied');
+          setTimeout(() => { copyBtn.textContent = orig; copyBtn.classList.remove('toast-copied'); }, 1200);
+        }).catch(()=>{});
+      });
+    }
+    const delBtn = tr.querySelector('.delete-btn');
+    if(delBtn){
+      delBtn.addEventListener('click', () => {
+        newLeads = newLeads.filter(x => String(x['Sr.no']) !== srno);
+        computeWorking();
+        commitDeleteLead(srno);
+        renderAll();
+      });
+    }
+  });
+  // View-only users: disable every editable cell with a real `disabled` attribute
+  // (not just visual styling) so the field can't be focused, clicked, or typed into
+  // at all — the write-guards in commitField/etc. are a backstop, this is the
+  // primary UX signal that the account has read-only access.
+  if(!canWrite()){
+    document.querySelectorAll('#leadsBody [data-field]').forEach(el => { el.disabled = true; });
+    document.querySelectorAll('#leadsBody .delete-btn').forEach(el => el.remove());
+  }
+}
+
+// ============ Add Lead modal ============
+const ADD_FIELDS = [
+  {key:'Enquiry Number', label:'Enquiry Number', type:'text'},
+  {key:'Company Name', label:'Company Name', type:'text'},
+  {key:'Visitor Name', label:'Visitor Name', type:'text'},
+  {key:'State', label:'State', type:'text', required:true},
+  {key:'City', label:'City', type:'text', required:true},
+  {key:'Application Category', label:'Application Category', type:'select', options: null, required:true},
+  {key:'Application (as recorded)', label:'Application Detail', type:'text', full:true},
+  {key:'Product Interest', label:'Product Interest', type:'select', options: PRODUCT_OPTIONS},
+  {key:'Email ID', label:'Email', type:'email'},
+  {key:'Phone No.', label:'Phone', type:'tel'},
+  {key:'Card Collected', label:'Card Collected', type:'select', options: CARD_OPTIONS},
+  {key:'Follow-Up Status', label:'Follow-Up Status', type:'select', options: STATUS_OPTIONS},
+  {key:'Lead Quality', label:'Lead Quality', type:'select', options: LEAD_QUALITY_OPTIONS, blankOption:true},
+  {key:'Inquiry Source', label:'Inquiry Source', type:'select', options: INQUIRY_SOURCE_OPTIONS, blankOption:true},
+  {key:'Lead Type', label:'Lead Type', type:'select', options: LEAD_TYPE_OPTIONS, blankOption:true},
+  {key:'Moved to SourcePro', label:'Moved to SourcePro', type:'select', options: SOURCEPRO_OPTIONS, blankOption:true},
+  {key:'Lead Value', label:'Lead Value (₹)', type:'text'},
+  {key:'Lead Generated By', label:'Lead Generated By', type:'text'},
+  {key:'Next Follow-up Date', label:'Next Follow-up Date', type:'date'},
+  {key:'ERP Lead Number', label:'ERP Lead Number', type:'text'},
+  {key:'Received Date', label:'Received Date', type:'date'},
+  {key:'Notes', label:'Notes', type:'text', full:true},
+];
+
+function buildAddForm(){
+  const form = $('#addForm');
+  form.innerHTML = ADD_FIELDS.map(f => {
+    let input;
+    if(f.type === 'select'){
+      const opts = f.options || APP_CATS;
+      const blank = f.blankOption ? `<option value="" selected>—</option>` : '';
+      input = `<select id="add-${slug(f.key)}">${blank}${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+    } else {
+      input = `<input id="add-${slug(f.key)}" type="${f.type}" placeholder="${f.label}${f.required?' *':''}">`;
+    }
+    return `<div class="form-field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label>${input}</div>`;
+  }).join('');
+}
+
+function suggestNextEnquiryNumber(){
+  // Looks at existing Enquiry Numbers matching this FY's "SI/<fy>/<n>" pattern and
+  // suggests the next one — a starting point only, always editable/overridable,
+  // and never touches any existing lead's stored Enquiry Number.
+  const fy = currentFYCode();
+  const prefix = `SI/${fy}/`;
+  let maxN = 1000;
+  workingLeads.forEach(r => {
+    const v = String(r['Enquiry Number'] || '');
+    if(v.startsWith(prefix)){
+      const n = parseInt(v.slice(prefix.length), 10);
+      if(!isNaN(n) && n > maxN) maxN = n;
+    }
+  });
+  return `${prefix}${maxN + 1}`;
+}
+$('#addLeadBtn').addEventListener('click', () => {
+  buildAddForm();
+  const receivedInput = $('#add-Received-Date');
+  if(receivedInput) receivedInput.value = todayISO();
+  const enquiryInput = $('#add-Enquiry-Number');
+  if(enquiryInput) enquiryInput.value = suggestNextEnquiryNumber();
+  $('#addModal').classList.add('open');
+});
+$('#cancelAddBtn').addEventListener('click', () => $('#addModal').classList.remove('open'));
+$('#addModal').addEventListener('click', (e) => { if(e.target.id === 'addModal') $('#addModal').classList.remove('open'); });
+
+$('#saveAddBtn').addEventListener('click', () => {
+  const rec = {};
+  let missing = [];
+  ADD_FIELDS.forEach(f => {
+    const el = $('#add-' + slug(f.key));
+    rec[f.key] = el.value.trim();
+    if(f.required && !rec[f.key]) missing.push(f.label);
+  });
+  if(missing.length){ alert('Please fill in: ' + missing.join(', ')); return; }
+  const parsedLeadValue = parseINR(rec['Lead Value']);
+  if(parsedLeadValue.error){ alert(parsedLeadValue.error); return; }
+  const nextSr = Math.max(BASE_MAX_SR, ...newLeads.map(x=>Number(x['Sr.no'])), BASE_MAX_SR) + 1;
+  rec['Sr.no'] = nextSr;
+  rec['Area (as recorded)'] = rec['Area (as recorded)'] || rec['City'];
+  rec['Product Interest (as recorded)'] = rec['Product Interest'];
+  rec['Attended By'] = currentUser || '';
+  rec['Card Collected'] = rec['Card Collected'] || 'Not Recorded';
+  rec['Follow-Up Status'] = rec['Follow-Up Status'] || 'Not Contacted';
+  rec['Lead Value'] = parsedLeadValue.value;
+  newLeads.push(rec);
+  computeWorking();
+  commitNewLead(rec);
+  $('#addModal').classList.remove('open');
+  renderAll();
+  $('#searchBox').value = ''; $('#stateFilter').value=''; $('#cityFilter').value='';
+  $('#appFilter').value=''; $('#productFilter').value=''; $('#statusFilter').value='';
+  applyFilters();
+});
+
+// ============ Export (CSV / Excel / PDF) — always pulls from the live workingLeads,
+// so every export always reflects every edit, status change, added lead, and dated
+// note currently on screen — never just the original static data. ============
+const EXPORT_COLS = ['Sr.no','Enquiry Number','State','City','Application Category','Application (as recorded)','Product Interest',
+                      'Company Name','Visitor Name','Email ID','Phone No.','Card Collected','Follow-Up Status',
+                      'Lead Quality','Inquiry Source','Lead Type','Moved to SourcePro','Lead Value','Lead Generated By',
+                      'Next Follow-up Date','ERP Lead Number','Order No','Order Date','Received Date','Notes'];
+
+function toCsvValue(v){
+  v = (v===undefined||v===null) ? '' : String(v);
+  if(/[",\n]/.test(v)) return '"' + v.replace(/"/g,'""') + '"';
+  return v;
+}
+function notesLogText(srno){
+  const list = notesFor(srno).slice().reverse(); // oldest first for a readable export
+  return list.map(e => `${e.date} (${e.by}): ${e.text}`).join(' | ');
+}
+function exportRow(r){
+  const obj = {};
+  EXPORT_COLS.forEach(c => { obj[c] = r[c] ?? ''; });
+  obj['No. of Follow-ups'] = followupCountFor(r['Sr.no']);
+  obj['Last Follow-up Date'] = lastFollowupDateFor(r['Sr.no']);
+  obj['Notes Log'] = notesLogText(r['Sr.no']);
+  return obj;
+}
+// If Firebase is configured but hasn't finished its first sync yet, exporting now
+// could ship an incomplete snapshot — confirm with the user rather than silently
+// exporting a partial file.
+function exportReady(){
+  if(FIREBASE_ENABLED && fb && !hasSyncedOnce){
+    return confirm('Still syncing with your team\'s latest data — export now with what\'s loaded so far?');
+  }
+  return true;
+}
+
+// ---- Export scope (all leads vs. just what the current filters show) ----
+// Whenever a filter is active, ask which set to export instead of silently
+// always exporting everything (or always exporting just the filtered view).
+function isFilterActive(){
+  return lastFiltered.length !== workingLeads.length;
+}
+let pendingExportKind = null;
+function requestExport(kind){
+  if(!exportReady()) return;
+  if(isFilterActive()){
+    pendingExportKind = kind;
+    $('#exportScopeSub').textContent = `Your current filters match ${lastFiltered.length} of ${workingLeads.length} total leads.`;
+    $('#exportFilteredCount').textContent = lastFiltered.length;
+    $('#exportAllCount').textContent = workingLeads.length;
+    $('#exportScopeModal').classList.add('open');
+  } else {
+    runExport(kind, workingLeads);
+  }
+}
+function runExport(kind, leads){
+  if(kind === 'csv') runExportCsv(leads);
+  else if(kind === 'xlsx') runExportXlsx(leads);
+  else if(kind === 'pdf') runExportPdf(leads);
+}
+$('#exportFilteredBtn').addEventListener('click', () => {
+  $('#exportScopeModal').classList.remove('open');
+  runExport(pendingExportKind, lastFiltered);
+  pendingExportKind = null;
+});
+$('#exportAllBtn').addEventListener('click', () => {
+  $('#exportScopeModal').classList.remove('open');
+  runExport(pendingExportKind, workingLeads);
+  pendingExportKind = null;
+});
+$('#exportScopeCancelBtn').addEventListener('click', () => {
+  $('#exportScopeModal').classList.remove('open');
+  pendingExportKind = null;
+});
+$('#exportScopeModal').addEventListener('click', (e) => { if(e.target.id === 'exportScopeModal'){ $('#exportScopeModal').classList.remove('open'); pendingExportKind = null; } });
+
+function runExportCsv(leads){
+  const cols = EXPORT_COLS.concat('Notes Log');
+  const rows = [cols.join(',')].concat(leads.map(r => {
+    const obj = exportRow(r);
+    return cols.map(c => toCsvValue(obj[c])).join(',');
+  }));
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const suffix = leads.length !== workingLeads.length ? `_filtered_${leads.length}` : '';
+  a.href = url; a.download = `exhibition_leads_${todayISO()}${suffix}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+$('#exportBtn').addEventListener('click', () => requestExport('csv'));
+
+// ---- Excel (.xlsx) export via SheetJS, loaded on demand ----
+let sheetJsLoading = null;
+function ensureSheetJS(){
+  if(window.XLSX) return Promise.resolve(true);
+  if(sheetJsLoading) return sheetJsLoading;
+  sheetJsLoading = new Promise(resolve => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+  return sheetJsLoading;
+}
+
+function breakdownRows(key, leads){
+  const counts = countBy(leads || workingLeads, key);
+  return Object.entries(counts).sort((a,b) => b[1]-a[1]);
+}
+function sumValueByKey(key, leads){
+  const m = {};
+  (leads || workingLeads).forEach(r => {
+    const k = r[key] || 'Not Specified';
+    m[k] = (m[k] || 0) + (Number(r['Lead Value']) || 0);
+  });
+  return Object.entries(m).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+}
+
+async function runExportXlsx(leads){
+  const btn = $('#exportXlsxBtn');
+  const orig = btn.textContent;
+  btn.textContent = 'LOADING…';
+  const ok = await ensureSheetJS();
+  btn.textContent = orig;
+  if(!ok || !window.XLSX){
+    alert('Could not load the Excel export library — check your internet connection and try again.');
+    return;
+  }
+
+  const cols = EXPORT_COLS.concat('Notes Log');
+  const leadRows = leads.map(r => exportRow(r));
+  const leadsSheet = XLSX.utils.json_to_sheet(leadRows, {header: cols});
+  leadsSheet['!cols'] = cols.map(c => ({ wch: Math.min(45, Math.max(11, c.length + 3)) }));
+  leadsSheet['!freeze'] = {xSplit:0, ySplit:1};
+
+  const total = leads.length;
+  const cardsYes = leads.filter(r => r['Card Collected'] === 'Yes').length;
+  const dobotInterest = leads.filter(r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth').length;
+  const rexrothInterest = leads.filter(r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth').length;
+  const pending = leads.filter(r => (r['Follow-Up Status']||'Not Contacted') === 'Not Contacted').length;
+  const wonLeadsXlsx = leads.filter(r => r['Follow-Up Status'] === 'Won');
+  const lostLeadsXlsx = leads.filter(r => r['Follow-Up Status'] === 'Lost');
+  const openPipelineXlsx = leads.filter(r => !CLOSED_STATUSES.includes(r['Follow-Up Status'] || 'Not Contacted'));
+  const totalValue = leads.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+  const wonValue = wonLeadsXlsx.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+  const valuedCount = leads.filter(r => Number(r['Lead Value']) > 0).length;
+  const isFiltered = leads.length !== workingLeads.length;
+  const brandRowsXlsx = [
+    ['Rexroth', r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth'],
+    ['Dobot', r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth'],
+  ].map(([name, match]) => {
+    const bl = leads.filter(match);
+    return [name, bl.length, bl.filter(r=>r['Follow-Up Status']==='Won').length, bl.filter(r=>r['Follow-Up Status']==='Lost').length];
+  });
+
+  const summaryAoa = [
+    ['Exhibition Lead Dashboard — Summary'],
+    ['Generated', new Date().toLocaleString()],
+    ['Generated by', currentUser || 'Teammate'],
+    ['Scope', isFiltered ? `Filtered view (${total} of ${workingLeads.length} leads)` : `All leads (${total})`],
+    [],
+    ['KPI', 'Value'],
+    ['Total Leads', total],
+    ['Won', wonLeadsXlsx.length],
+    ['Lost', lostLeadsXlsx.length],
+    ['Open Pipeline', openPipelineXlsx.length],
+    ['Conversion Rate', total ? wonLeadsXlsx.length/total : 0],
+    ['Cards Collected', cardsYes],
+    ['Dobot Interest', dobotInterest],
+    ['Rexroth Interest', rexrothInterest],
+    ['Follow-Up Pending', pending],
+    ['Total Lead Value (INR)', totalValue],
+    ['Won Value (INR)', wonValue],
+    ['Leads with a Value Entered', valuedCount],
+    [],
+    ['Brand', 'Total', 'Won', 'Lost'], ...brandRowsXlsx,
+    [],
+    ['By State', 'Count'], ...breakdownRows('State', leads),
+    [],
+    ['By Application', 'Count'], ...breakdownRows('Application Category', leads),
+    [],
+    ['By Product Interest', 'Count'], ...breakdownRows('Product Interest', leads),
+    [],
+    ['By Follow-Up Status', 'Count'], ...breakdownRows('Follow-Up Status', leads),
+    [],
+    ['By Lead Quality', 'Count'], ...breakdownRows('Lead Quality', leads),
+    [],
+    ['By Inquiry Source', 'Count'], ...breakdownRows('Inquiry Source', leads),
+    [],
+    ['By Lead Generated By', 'Count'], ...breakdownRows('Lead Generated By', leads),
+    [],
+    ['Lead Value (INR) by Follow-Up Status', 'Total Value'], ...sumValueByKey('Follow-Up Status', leads),
+    [],
+    ['Lead Value (INR) by Generated By', 'Total Value'], ...sumValueByKey('Lead Generated By', leads),
+  ];
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryAoa);
+  summarySheet['!cols'] = [{wch:28},{wch:16}];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+  XLSX.utils.book_append_sheet(wb, leadsSheet, 'Leads');
+  const suffix = isFiltered ? `_filtered_${total}` : '';
+  XLSX.writeFile(wb, `exhibition_leads_${todayISO()}${suffix}.xlsx`);
+}
+$('#exportXlsxBtn').addEventListener('click', () => requestExport('xlsx'));
+
+// ---- PDF report (management summary with charts) — rendered as a printable page,
+// exported via the browser's native "Save as PDF" print target (no external PDF
+// library needed, works offline). ----
+const CHART_COLORS = ['#4a90d9','#f0a63b','#4cb782','#d96a6a','#c9a4f0','#2f8fd0','#e0b04f','#7d8794'];
+function svgPie(entries, size){
+  size = size || 170;
+  const total = entries.reduce((s,[,v]) => s+v, 0) || 1;
+  const cx = size/2, cy = size/2, r = size/2 - 6;
+  let angle = -90;
+  const paths = entries.map(([label,val], i) => {
+    const frac = val/total;
+    const startAngle = angle, endAngle = angle + frac*360;
+    angle = endAngle;
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    if(frac >= 0.999){
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="#fff" stroke-width="1"/>`;
+    }
+    const large = (endAngle-startAngle) > 180 ? 1 : 0;
+    const x1 = cx + r*Math.cos(startAngle*Math.PI/180), y1 = cy + r*Math.sin(startAngle*Math.PI/180);
+    const x2 = cx + r*Math.cos(endAngle*Math.PI/180), y2 = cy + r*Math.sin(endAngle*Math.PI/180);
+    return `<path d="M ${cx},${cy} L ${x1.toFixed(2)},${y1.toFixed(2)} A ${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" stroke="#fff" stroke-width="1"/>`;
+  }).join('');
+  const legend = entries.map(([label,val],i) => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:4px;color:#333;"><span style="width:10px;height:10px;background:${CHART_COLORS[i%CHART_COLORS.length]};display:inline-block;border-radius:2px;flex:none;"></span><span>${escapeHtml(label)} — ${val} (${Math.round(val/total*100)}%)</span></div>`).join('');
+  return `<div style="display:flex; align-items:center; gap:18px;"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths}</svg><div>${legend}</div></div>`;
+}
+function reportBarChart(entries, fmt){
+  fmt = fmt || (v => v);
+  const max = entries.length ? Math.max(...entries.map(e => e[1])) : 1;
+  return entries.map(([label,val]) => `
+    <div style="display:grid; grid-template-columns:130px 1fr 70px; align-items:center; gap:8px; margin-bottom:6px;">
+      <div style="font-size:11px; color:#444; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(label)}</div>
+      <div style="background:#eee; border-radius:4px; height:12px; overflow:hidden;"><div style="height:100%; width:${(val/max*100).toFixed(1)}%; background:#4a90d9;"></div></div>
+      <div style="font-size:11px; color:#444; text-align:right;">${fmt(val)}</div>
+    </div>`).join('');
+}
+
+function buildReportBodyHTML(leads){
+  const total = leads.length;
+  const isFiltered = leads.length !== workingLeads.length;
+  const cardsYes = leads.filter(r => r['Card Collected'] === 'Yes').length;
+  const statesSet = new Set(leads.map(r => r.State).filter(s => s && s !== 'Not Specified'));
+  const dobotInterest = leads.filter(r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth').length;
+  const rexrothInterest = leads.filter(r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth').length;
+  const pending = leads.filter(r => (r['Follow-Up Status']||'Not Contacted') === 'Not Contacted').length;
+  const wonLeadsRpt = leads.filter(r => r['Follow-Up Status'] === 'Won');
+  const lostLeadsRpt = leads.filter(r => r['Follow-Up Status'] === 'Lost');
+  const openPipelineRpt = leads.filter(r => !CLOSED_STATUSES.includes(r['Follow-Up Status'] || 'Not Contacted'));
+  const totalValue = leads.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+  const wonValue = wonLeadsRpt.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+
+  const statusEntries = breakdownRows('Follow-Up Status', leads);
+  const productEntries = breakdownRows('Product Interest', leads);
+  const qualityEntries = breakdownRows('Lead Quality', leads);
+  const sourceEntries = breakdownRows('Inquiry Source', leads);
+  const stateEntries = breakdownRows('State', leads).slice(0, 10);
+  const appEntries = breakdownRows('Application Category', leads).slice(0, 10);
+  const cardEntries = breakdownRows('Card Collected', leads);
+  const valueByStatus = sumValueByKey('Follow-Up Status', leads).slice(0, 10);
+  const valueByGenerator = sumValueByKey('Lead Generated By', leads).slice(0, 10);
+  const brandRowsRpt = [
+    ['Rexroth', r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth'],
+    ['Dobot', r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth'],
+  ].map(([name, match]) => {
+    const bl = leads.filter(match);
+    return { name, total: bl.length, won: bl.filter(r=>r['Follow-Up Status']==='Won').length, lost: bl.filter(r=>r['Follow-Up Status']==='Lost').length };
+  });
+
+  const kpis = [
+    ['Total Leads', total], ['Won', wonLeadsRpt.length], ['Lost', lostLeadsRpt.length], ['Open Pipeline', openPipelineRpt.length],
+    ['Conversion Rate', fmtPct(wonLeadsRpt.length, total)], ['Cards Collected', cardsYes], ['States Reached', statesSet.size],
+    ['Dobot Interest', dobotInterest], ['Rexroth Interest', rexrothInterest], ['Follow-Up Pending', pending],
+    ['Total Lead Value', '₹' + (formatINR(totalValue) || '0')], ['Won Value', '₹' + (formatINR(wonValue) || '0')],
+  ];
+
+  const tableRows = leads.map(r => `
+    <tr>
+      <td>${r['Sr.no']}</td>
+      <td>${escapeHtml(r['Enquiry Number'])}</td>
+      <td>${escapeHtml(r['Company Name'])}</td>
+      <td>${escapeHtml(r['Visitor Name'])}</td>
+      <td>${escapeHtml(r.State)}</td>
+      <td>${escapeHtml(r.City)}</td>
+      <td>${escapeHtml(r['Application Category'])}</td>
+      <td>${escapeHtml(r['Product Interest'])}</td>
+      <td>${escapeHtml(r['Follow-Up Status'] || 'Not Contacted')}</td>
+      <td>${escapeHtml(r['Lead Quality'])}</td>
+      <td>${escapeHtml(r['Inquiry Source'])}</td>
+      <td style="text-align:right;">${formatINR(r['Lead Value']) ? '₹' + formatINR(r['Lead Value']) : ''}</td>
+      <td>${escapeHtml(r['Lead Generated By'])}</td>
+      <td style="text-align:center;">${followupCountFor(r['Sr.no'])}</td>
+      <td>${escapeHtml(r['Next Follow-up Date'])}</td>
+      <td>${escapeHtml((notesFor(r['Sr.no'])[0] || {}).text || r['Notes'] || '')}</td>
+    </tr>`).join('');
+
+  return `
+    <h1 class="report-h1">Syncaxis Leads Tracker Intelligence Mechanism — Management Report</h1>
+    <div class="report-sub">Generated ${new Date().toLocaleString()} by ${escapeHtml(currentUser || 'Teammate')} · ${total} leads${isFiltered ? ` <b>(filtered view — ${total} of ${workingLeads.length} total)</b>` : ''}</div>
+
+    <div class="report-kpi-grid">
+      ${kpis.map(([label,val]) => `<div class="report-kpi"><div class="report-kpi-label">${label}</div><div class="report-kpi-value">${val}</div></div>`).join('')}
+    </div>
+
+    <div class="report-section-title">Brand Comparison — Rexroth &amp; Dobot Combined</div>
+    <table class="report-table" style="max-width:420px;">
+      <thead><tr><th>Brand</th><th>Total</th><th>Won</th><th>Lost</th></tr></thead>
+      <tbody>${brandRowsRpt.map(b => `<tr><td>${b.name}</td><td>${b.total}</td><td>${b.won}</td><td>${b.lost}</td></tr>`).join('')}</tbody>
+    </table>
+
+    <div class="report-section-title">Follow-Up Status &amp; Product Interest</div>
+    <div class="report-chart-row">
+      <div>${svgPie(statusEntries)}</div>
+      <div>${svgPie(productEntries)}</div>
+    </div>
+
+    ${qualityEntries.length || sourceEntries.length ? `
+    <div class="report-section-title">Lead Quality &amp; Inquiry Source</div>
+    <div class="report-chart-row">
+      <div>${qualityEntries.length ? svgPie(qualityEntries) : '<div style="color:#999;font-size:12px;">No lead quality data yet.</div>'}</div>
+      <div>${sourceEntries.length ? svgPie(sourceEntries) : '<div style="color:#999;font-size:12px;">No inquiry source data yet.</div>'}</div>
+    </div>` : ''}
+
+    <div class="report-section-title">Cards Collected</div>
+    ${svgPie(cardEntries, 130)}
+
+    <div class="report-section-title">Top States</div>
+    ${reportBarChart(stateEntries)}
+
+    <div class="report-section-title">Top Applications</div>
+    ${reportBarChart(appEntries)}
+
+    ${valueByStatus.length ? `
+    <div class="report-section-title">Pipeline Value (₹) by Follow-Up Status</div>
+    ${reportBarChart(valueByStatus, v => '₹' + formatINR(v))}` : ''}
+
+    ${valueByGenerator.length ? `
+    <div class="report-section-title">Pipeline Value (₹) by Lead Generated By</div>
+    ${reportBarChart(valueByGenerator, v => '₹' + formatINR(v))}` : ''}
+
+    <div class="report-section-title">Full Lead List (${total})</div>
+    <table class="report-table">
+      <thead><tr><th>#</th><th>Enquiry No</th><th>Company</th><th>Visitor</th><th>State</th><th>City</th><th>Application</th><th>Product</th><th>Status</th><th>Quality</th><th>Source</th><th>Value (₹)</th><th>Generated By</th><th>Follow-ups</th><th>Next Follow-up</th><th>Latest Note</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>`;
+}
+
+// Rendered as a same-page overlay + window.print(), NOT window.open() — popup
+// blockers (common in corporate browsers) would silently kill a new-tab report,
+// but printing the current page always works and lets the user "Save as PDF"
+// from the browser's own print dialog.
+function runExportPdf(leads){
+  $('#reportContent').innerHTML = buildReportBodyHTML(leads);
+  $('#reportOverlay').classList.add('open');
+  window.scrollTo(0, 0);
+}
+$('#exportPdfBtn').addEventListener('click', () => requestExport('pdf'));
+$('#reportPrintBtn').addEventListener('click', () => window.print());
+$('#reportCloseBtn').addEventListener('click', () => $('#reportOverlay').classList.remove('open'));
+
+// ============ Access control: mandatory sign-in + role system ============
+// Everyone who opens this dashboard must sign in with a REAL Firebase email/password
+// account — there is no anonymous / "just type your name" path anymore, and no
+// password check written into this page's own JS (which anyone could read via "view
+// source" or bypass via dev tools). signInWithEmailAndPassword() round-trips to
+// Firebase's servers and only succeeds with a genuine, previously-created account;
+// wrong credentials are rejected server-side, and Firebase automatically throttles
+// repeated failed attempts. What an account can actually DO once signed in (read the
+// board, write to it, open the Management Panel, manage other users) is enforced
+// server-side by Firestore Security Rules based on its role — the UI gating below
+// is just the matching user experience, not the real security boundary.
+let realtimeSyncStarted = false;
+
+async function resolveUserRole(user){
+  const email = (user.email || '').toLowerCase();
+  if(email === SUPERADMIN_EMAIL.toLowerCase()){
+    return { role:'superadmin', scope:'all', displayName: SUPERADMIN_EMAIL.split('@')[0] };
+  }
+  if(email === LEGACY_MANAGER_EMAIL.toLowerCase()){
+    return { role:'management', scope:'all', displayName: LEGACY_MANAGER_EMAIL.split('@')[0] };
+  }
+  try{
+    const snap = await fb.getDoc(fb.doc(fb.db, USERS_COLLECTION, user.uid));
+    if(!snap.exists()) return null;
+    const data = snap.data() || {};
+    if(data.disabled) return null;
+    if(!['management','sales','viewer'].includes(data.role)) return null;
+    return { role: data.role, scope: data.scope === 'own' ? 'own' : 'all', displayName: data.displayName || email.split('@')[0] };
+  }catch(err){
+    console.error('Could not read role for signed-in user:', err);
+    return null;
+  }
+}
+
+async function handleAuthChange(user){
+  if(!user){
+    currentRole = null; currentUser = ''; currentUserEmail = ''; currentScope = 'all';
+    // Defense-in-depth: drop every in-memory copy of the board on sign-out (not just
+    // block the view behind the gate) so nothing lingers accessible via devtools
+    // after someone leaves. A future sign-in re-syncs everything fresh from Firestore.
+    BASE_LEADS = []; edits = {}; newLeads = []; editMeta = {}; noteLogs = {};
+    computeWorking();
+    realtimeSyncStarted = false;
+    hasSyncedOnce = false;
+    boardHasBaseLeads = false;
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){} // this is a shared/exhibition-floor tool — don't leave data behind on a shared device
+    renderAll();
+    showAuthGate();
+    return;
+  }
+  const resolved = await resolveUserRole(user);
+  if(!resolved){
+    const err = $('#authLoginError');
+    err.textContent = "This account exists but hasn't been granted access yet — ask your Super Admin to add you.";
+    err.style.display = 'block';
+    try{ await fb.signOut(fb.auth); }catch(e){} // re-triggers handleAuthChange(null), which keeps the gate open
+    return;
+  }
+  currentRole = resolved.role;
+  currentScope = resolved.scope;
+  currentUser = resolved.displayName;
+  currentUserEmail = user.email || '';
+  hideAuthGate();
+  updateRoleUI();
+  await ensureBoardDocExists();
+  computeWorking();
+  renderAll();
+  if(!realtimeSyncStarted){
+    realtimeSyncStarted = true;
+    startRealtimeSync();
+  }
+}
+
+function showAuthGate(){
+  $('#authGateOverlay').classList.add('open');
+  $('#mgmtAccess').style.display = 'none';
+}
+function hideAuthGate(){
+  $('#authGateOverlay').classList.remove('open');
+  $('#authLoginError').style.display = 'none';
+  $('#authEmailInput').value = ''; $('#authPasswordInput').value = '';
+}
+function updateRoleUI(){
+  $('#currentUserLabel').textContent = currentUser || currentUserEmail || '—';
+  const pill = $('#currentRolePill');
+  pill.textContent = ROLE_LABELS[currentRole] || '';
+  pill.className = 'role-pill role-' + (currentRole || '');
+  $('#mgmtAccess').style.display = '';
+  $('#openMgmtPanelBtn').style.display = canManage() ? '' : 'none';
+  $('#openSuperAdminBtn').style.display = isSuperAdmin() ? '' : 'none';
+  $('#signOutBtn').style.display = '';
+  $('#addLeadBtn').style.display = canWrite() ? '' : 'none';
+}
+
+async function submitAuthLogin(){
+  if(!fb || !fb.auth){ alert("Firebase isn't connected right now — try again in a moment."); return; }
+  const email = $('#authEmailInput').value.trim();
+  const password = $('#authPasswordInput').value;
+  const errBox = $('#authLoginError');
+  errBox.style.display = 'none';
+  if(!email || !password){ errBox.textContent = 'Enter both email and password.'; errBox.style.display = 'block'; return; }
+  const btn = $('#authLoginSubmitBtn');
+  const orig = btn.textContent;
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  try{
+    await fb.signInWithEmailAndPassword(fb.auth, email, password);
+    // handleAuthChange (via onAuthStateChanged) takes it from here.
+  }catch(err){
+    const messages = {
+      'auth/invalid-credential': 'Incorrect email or password.',
+      'auth/user-not-found': 'No account with that email.',
+      'auth/wrong-password': 'Incorrect password.',
+      'auth/invalid-email': 'That doesn\'t look like a valid email address.',
+      'auth/too-many-requests': 'Too many failed attempts — try again in a few minutes.',
+      'auth/network-request-failed': 'Network error — check your connection and try again.',
+    };
+    errBox.textContent = messages[err.code] || ('Sign-in failed: ' + err.message);
+    errBox.style.display = 'block';
+  }
+  btn.textContent = orig; btn.disabled = false;
+}
+$('#authLoginSubmitBtn').addEventListener('click', submitAuthLogin);
+$('#authPasswordInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') submitAuthLogin(); });
+
+$('#signOutBtn').addEventListener('click', async () => {
+  $('#mgmtPanelOverlay').classList.remove('open');
+  $('#superAdminOverlay').classList.remove('open');
+  if(!fb || !fb.auth) return;
+  try{ await fb.signOut(fb.auth); }catch(err){ console.error('Sign-out failed:', err); }
+});
+
+// ============ Management Panel ============
+$('#openMgmtPanelBtn').addEventListener('click', () => {
+  if(!canManage()) return;
+  renderManagementPanel();
+  $('#mgmtPanelOverlay').classList.add('open');
+});
+$('#mgmtPanelCloseBtn').addEventListener('click', () => $('#mgmtPanelOverlay').classList.remove('open'));
+$('#mgmtPanelExportBtn').addEventListener('click', () => runExportPdf(workingLeads));
+
+// ============ Super Admin Panel — manage who has access ============
+$('#openSuperAdminBtn').addEventListener('click', () => {
+  if(!isSuperAdmin()) return;
+  renderSuperAdminPanel();
+  $('#superAdminOverlay').classList.add('open');
+});
+$('#superAdminCloseBtn').addEventListener('click', () => $('#superAdminOverlay').classList.remove('open'));
+
+async function renderSuperAdminPanel(){
+  const content = $('#superAdminContent');
+  content.innerHTML = `<div class="mgmt-empty">Loading users…</div>`;
+  let users = [];
+  try{
+    const snap = await fb.getDocs(fb.collection(fb.db, USERS_COLLECTION));
+    snap.forEach(d => users.push({ uid: d.id, ...d.data() }));
+  }catch(err){
+    content.innerHTML = `<div class="mgmt-section"><div class="mgmt-empty">Couldn't load users: ${escapeHtml(err.message)}</div></div>`;
+    return;
+  }
+  users.sort((a,b) => (a.displayName||a.email||'').localeCompare(b.displayName||b.email||''));
+
+  const migrationBanner = (!boardHasBaseLeads && BASE_LEADS.length) ? `
+    <div class="mgmt-section" style="border-color:var(--amber);">
+      <div class="mgmt-section-title">⚠ One-Time: Move Seed Data Into Firestore</div>
+      <div class="section-note" style="margin-bottom:14px;">This browser still has the original ${BASE_LEADS.length} seed leads loaded locally, but Firestore doesn't have them yet — meaning the deployed (public) copy of this page, which no longer embeds them, would show 0 base leads until this runs once. Click below to copy them into Firestore. Safe to click more than once; it only writes if Firestore is still empty.</div>
+      <button class="btn btn-primary" id="migrateSeedDataBtn">Migrate ${BASE_LEADS.length} Seed Leads to Firestore</button>
+      <div class="section-note" id="migrateSeedDataStatus" style="margin-top:10px;"></div>
+    </div>` : '';
+
+  content.innerHTML = `
+    ${migrationBanner}
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Add a New User</div>
+      <div class="section-note" style="margin-bottom:14px;">No password is ever typed or shared here — they get an email at the address you enter, to set their own password before their first sign-in.</div>
+      <div class="form-grid">
+        <div class="form-field"><label>Full Name</label><input type="text" id="newUserName" placeholder="e.g. Priya Sharma"></div>
+        <div class="form-field"><label>Email</label><input type="email" id="newUserEmail" placeholder="name@syncaxis.com"></div>
+        <div class="form-field"><label>Role</label>
+          <select id="newUserRole">
+            <option value="sales">Sales Person</option>
+            <option value="management">Management</option>
+            <option value="viewer">View Only</option>
+          </select>
+        </div>
+        <div class="form-field" id="newUserScopeField"><label>Sales Sees</label>
+          <select id="newUserScope">
+            <option value="all">All Leads</option>
+            <option value="own">Only Their Own Leads</option>
+          </select>
+        </div>
+      </div>
+      <div class="section-note" id="newUserError" style="color:var(--red); display:none; margin-top:10px;"></div>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button class="btn btn-primary" id="addUserBtn">+ ADD USER</button>
+      </div>
+    </div>
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Built-in Accounts</div>
+      <div class="section-note" style="margin-bottom:10px;">Always have access — hardcoded in both the app and the security rules, so the system can never lock everyone out.</div>
+      <div class="user-row head"><div>Email</div><div>Role</div><div>Scope</div><div>Status</div><div></div></div>
+      <div class="user-row"><div>${escapeHtml(SUPERADMIN_EMAIL)}</div><div>Superadmin</div><div>All</div><div style="color:var(--green);">Always active</div><div></div></div>
+      <div class="user-row"><div>${escapeHtml(LEGACY_MANAGER_EMAIL)}</div><div>Management</div><div>All</div><div style="color:var(--green);">Always active</div><div></div></div>
+    </div>
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Team Members (${users.length})</div>
+      ${!users.length ? `<div class="mgmt-empty">No users added yet — add one above.</div>` : `
+      <div class="user-row head"><div>Name / Email</div><div>Role</div><div>Scope</div><div>Status</div><div>Action</div></div>
+      ${users.map(u => `
+        <div class="user-row" data-uid="${u.uid}">
+          <div><div style="color:var(--text);">${escapeHtml(u.displayName||'—')}</div><div style="color:var(--text-faint); font-size:11px;">${escapeHtml(u.email||'')}</div></div>
+          <div><select class="role-select" data-uid="${u.uid}">
+            <option value="sales" ${u.role==='sales'?'selected':''}>Sales Person</option>
+            <option value="management" ${u.role==='management'?'selected':''}>Management</option>
+            <option value="viewer" ${u.role==='viewer'?'selected':''}>View Only</option>
+          </select></div>
+          <div><select class="scope-select" data-uid="${u.uid}" ${u.role!=='sales'?'disabled':''}>
+            <option value="all" ${u.scope!=='own'?'selected':''}>All Leads</option>
+            <option value="own" ${u.scope==='own'?'selected':''}>Own Leads Only</option>
+          </select></div>
+          <div style="color:${u.disabled?'var(--red)':'var(--green)'};">${u.disabled?'Disabled':'Active'}</div>
+          <div><button class="btn toggle-disable-btn" data-uid="${u.uid}" data-disabled="${!!u.disabled}">${u.disabled?'Enable':'Disable'}</button></div>
+        </div>`).join('')}
+      `}
+    </div>
+  `;
+
+  content.querySelectorAll('.role-select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const uid = sel.dataset.uid;
+      const scopeSel = content.querySelector(`.scope-select[data-uid="${uid}"]`);
+      if(scopeSel) scopeSel.disabled = sel.value !== 'sales';
+      try{
+        await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { role: sel.value }, { merge: true });
+      }catch(err){ alert('Could not update role: ' + err.message); }
+    });
+  });
+  content.querySelectorAll('.scope-select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const uid = sel.dataset.uid;
+      try{
+        await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { scope: sel.value }, { merge: true });
+      }catch(err){ alert('Could not update scope: ' + err.message); }
+    });
+  });
+  content.querySelectorAll('.toggle-disable-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const uid = btn.dataset.uid;
+      const wasDisabled = btn.dataset.disabled === 'true';
+      try{
+        await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { disabled: !wasDisabled }, { merge: true });
+        renderSuperAdminPanel();
+      }catch(err){ alert('Could not update status: ' + err.message); }
+    });
+  });
+
+  const roleField = $('#newUserRole');
+  roleField.addEventListener('change', () => {
+    $('#newUserScopeField').style.display = roleField.value === 'sales' ? '' : 'none';
+  });
+  roleField.dispatchEvent(new Event('change'));
+  $('#addUserBtn').addEventListener('click', submitAddUser);
+
+  const migrateBtn = $('#migrateSeedDataBtn');
+  if(migrateBtn) migrateBtn.addEventListener('click', migrateSeedDataToFirestore);
+}
+
+async function migrateSeedDataToFirestore(){
+  const btn = $('#migrateSeedDataBtn');
+  const status = $('#migrateSeedDataStatus');
+  btn.disabled = true;
+  status.textContent = 'Checking Firestore…';
+  try{
+    // Re-check right before writing (not just the value the panel rendered with) —
+    // guards against a double-click or a second admin racing this at the same time
+    // ever overwriting real data with a stale local copy.
+    const existing = await fb.getDoc(boardRef);
+    const already = existing.exists() && Array.isArray(existing.data().baseLeads) && existing.data().baseLeads.length > 0;
+    if(already){
+      status.textContent = 'Already migrated — Firestore already has the seed data. No changes made.';
+      boardHasBaseLeads = true;
+      btn.disabled = false;
+      return;
+    }
+    status.textContent = `Writing ${BASE_LEADS.length} leads to Firestore…`;
+    await fb.updateDoc(boardRef, { baseLeads: BASE_LEADS });
+    boardHasBaseLeads = true;
+    status.textContent = `Done — ${BASE_LEADS.length} seed leads are now in Firestore. You can redeploy the page without the embedded data.`;
+    renderSuperAdminPanel();
+  }catch(err){
+    status.textContent = 'Migration failed: ' + err.message;
+    btn.disabled = false;
+  }
+}
+
+async function submitAddUser(){
+  const name = $('#newUserName').value.trim();
+  const email = $('#newUserEmail').value.trim();
+  const role = $('#newUserRole').value;
+  const scope = $('#newUserScope').value;
+  const errBox = $('#newUserError');
+  errBox.style.display = 'none';
+  if(!name || !email){ errBox.textContent = 'Enter both a name and an email.'; errBox.style.display = 'block'; return; }
+  if(email.toLowerCase() === SUPERADMIN_EMAIL.toLowerCase() || email.toLowerCase() === LEGACY_MANAGER_EMAIL.toLowerCase()){
+    errBox.textContent = 'That email already has built-in access.'; errBox.style.display = 'block'; return;
+  }
+  const btn = $('#addUserBtn');
+  const orig = btn.textContent;
+  btn.textContent = 'Adding…'; btn.disabled = true;
+  // A random throwaway password the new user never sees or types — they set their own
+  // real password via the reset-link email sent right after account creation. This runs
+  // on a SECOND, isolated Firebase app instance so creating the account never signs the
+  // superadmin out of their own session (a known quirk of the client SDK:
+  // createUserWithEmailAndPassword on the primary app signs in AS the new user).
+  const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => b.toString(36)).join('').slice(0, 24) + 'Aa1!';
+  let secondaryApp = null;
+  try{
+    secondaryApp = fb.initializeApp(FIREBASE_CONFIG, 'secondary-' + Date.now());
+    const secondaryAuth = fb.getAuth(secondaryApp);
+    const cred = await fb.createUserWithEmailAndPassword(secondaryAuth, email, tempPassword);
+    const newUid = cred.user.uid;
+    await fb.sendPasswordResetEmail(secondaryAuth, email);
+    await fb.signOut(secondaryAuth);
+    await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, newUid), {
+      email, displayName: name, role, scope: role === 'sales' ? scope : 'all',
+      disabled: false, createdAt: fb.serverTimestamp(), createdBy: currentUserEmail,
+    });
+    alert(`${name} was added. They'll get an email at ${email} to set their password before signing in.`);
+    renderSuperAdminPanel();
+  }catch(err){
+    const messages = {
+      'auth/email-already-in-use': 'That email already has an account — check the list below, or ask them to sign in directly.',
+      'auth/invalid-email': "That doesn't look like a valid email address.",
+    };
+    errBox.textContent = messages[err.code] || ('Could not add user: ' + err.message);
+    errBox.style.display = 'block';
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
+    if(secondaryApp){ try{ await fb.deleteApp(secondaryApp); }catch(e){} }
+  }
+}
+
+function mgmtBarsHtml(entries, fmt){
+  fmt = fmt || (v => v);
+  if(!entries.length) return '<div class="mgmt-empty">No data yet.</div>';
+  const max = Math.max(...entries.map(e => e[1]));
+  return entries.map(([label,val]) => `
+    <div class="mgmt-bar-row">
+      <div class="mgmt-bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+      <div class="mgmt-bar-track"><div class="mgmt-bar-fill" style="width:${(val/max*100).toFixed(1)}%;"></div></div>
+      <div class="mgmt-bar-val">${fmt(val)}</div>
+    </div>`).join('');
+}
+
+function renderManagementPanel(){
+  const total = workingLeads.length;
+  const wonLeads = workingLeads.filter(r => r['Follow-Up Status'] === 'Won');
+  const lostLeads = workingLeads.filter(r => r['Follow-Up Status'] === 'Lost');
+  const openLeads = workingLeads.filter(r => !['Won','Lost','Not Relevant'].includes(r['Follow-Up Status'] || 'Not Contacted'));
+  const totalValue = workingLeads.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+  const wonValue = wonLeads.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+  const openValue = openLeads.reduce((s,r) => s + (Number(r['Lead Value'])||0), 0);
+  const valuedCount = workingLeads.filter(r => Number(r['Lead Value']) > 0).length;
+  const avgDeal = valuedCount ? Math.round(totalValue / valuedCount) : 0;
+
+  const kpis = [
+    { label:'Total Pipeline Value', value:'₹'+(formatINR(totalValue)||'0'), sub:`${valuedCount} of ${total} leads valued`, accent:'var(--green)' },
+    { label:'Won Value', value:'₹'+(formatINR(wonValue)||'0'), sub:`${wonLeads.length} won leads`, accent:'var(--green)' },
+    { label:'Open Pipeline Value', value:'₹'+(formatINR(openValue)||'0'), sub:`${openLeads.length} still active`, accent:'var(--amber)' },
+    { label:'Average Deal Size', value:'₹'+(formatINR(avgDeal)||'0'), sub:'per valued lead', accent:'var(--blue)' },
+    { label:'Win Rate', value: fmtPct(wonLeads.length, wonLeads.length+lostLeads.length), sub:`${wonLeads.length} won / ${lostLeads.length} lost`, accent:'var(--green)' },
+    { label:'Total Leads', value: total, sub:'captured + added', accent:'var(--blue)' },
+  ];
+
+  const valueByGenerator = sumValueByKey('Lead Generated By', workingLeads);
+  const countByGenerator = breakdownRows('Lead Generated By', workingLeads);
+  const valueByStatus = sumValueByKey('Follow-Up Status', workingLeads);
+  const valueByState = sumValueByKey('State', workingLeads).slice(0, 12);
+  const valueByBrand = [
+    ['Rexroth', r => r['Product Interest'] === 'Rexroth' || r['Product Interest'] === 'Dobot + Rexroth'],
+    ['Dobot', r => r['Product Interest'] === 'Dobot' || r['Product Interest'] === 'Dobot + Rexroth'],
+  ].map(([name, match]) => [name, workingLeads.filter(match).reduce((s,r)=>s+(Number(r['Lead Value'])||0),0)]).filter(([,v])=>v>0);
+
+  const todayStr = todayISO();
+  const overdueLeads = workingLeads
+    .filter(r => r['Next Follow-up Date'] && r['Next Follow-up Date'] < todayStr && !CLOSED_STATUSES.includes(r['Follow-Up Status'] || 'Not Contacted'))
+    .sort((a,b) => a['Next Follow-up Date'].localeCompare(b['Next Follow-up Date']));
+  const daysOverdue = dateStr => Math.round((new Date(todayStr) - new Date(dateStr)) / 86400000);
+
+  $('#mgmtPanelContent').innerHTML = `
+    <div class="kpi-row" style="margin-top:4px;">
+      ${kpis.map(k => `<div class="kpi" style="--accent:${k.accent}">
+        <div class="kpi-label">${k.label}</div>
+        <div class="kpi-value currency" title="${String(k.value).replace(/&/g,'&amp;')}">${k.value}</div>
+        <div class="kpi-sub">${k.sub}</div>
+      </div>`).join('')}
+    </div>
+
+    ${overdueLeads.length ? `
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">⚠ Overdue Follow-Ups (${overdueLeads.length})</div>
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr>
+          <th style="text-align:left; padding:6px 4px; color:var(--text-dim); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Company</th>
+          <th style="text-align:left; padding:6px 4px; color:var(--text-dim); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Assigned To</th>
+          <th style="text-align:left; padding:6px 4px; color:var(--text-dim); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Was Due</th>
+          <th style="text-align:right; padding:6px 4px; color:var(--red); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Days Overdue</th>
+          <th style="text-align:left; padding:6px 4px; color:var(--text-dim); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line);">Last Note</th>
+        </tr></thead>
+        <tbody>
+          ${overdueLeads.slice(0, 25).map(r => { const lastNote = notesFor(r['Sr.no'])[0]; return `<tr style="cursor:pointer;" data-sr="${r['Sr.no']}" class="mgmt-overdue-row">
+            <td style="padding:7px 4px; color:var(--text); border-bottom:1px solid var(--line-soft);">${escapeHtml(r['Company Name']) || '#'+r['Sr.no']}</td>
+            <td style="padding:7px 4px; color:var(--text-dim); border-bottom:1px solid var(--line-soft);">${escapeHtml(r['Lead Generated By']) || '—'}</td>
+            <td style="padding:7px 4px; color:var(--text-dim); font-family:var(--font-mono); border-bottom:1px solid var(--line-soft);">${r['Next Follow-up Date']}</td>
+            <td style="padding:7px 4px; text-align:right; color:var(--red); font-family:var(--font-mono); border-bottom:1px solid var(--line-soft);">${daysOverdue(r['Next Follow-up Date'])}</td>
+            <td style="padding:7px 4px; color:var(--text-dim); border-bottom:1px solid var(--line-soft); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${lastNote ? escapeHtml(lastNote.text) : '<span style="color:var(--text-faint); font-style:italic;">No notes yet</span>'}</td>
+          </tr>`; }).join('')}
+        </tbody>
+      </table>
+      ${overdueLeads.length > 25 ? `<div class="mgmt-empty">+ ${overdueLeads.length - 25} more not shown</div>` : ''}
+    </div>` : ''}
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Pipeline Value by Brand</div>
+      ${mgmtBarsHtml(valueByBrand, v => '₹'+formatINR(v))}
+    </div>
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Pipeline Value by Lead Generated By</div>
+      ${mgmtBarsHtml(valueByGenerator, v => '₹'+formatINR(v))}
+    </div>
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Leads Logged by Team Member (Sales Performance)</div>
+      ${mgmtBarsHtml(countByGenerator)}
+    </div>
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Pipeline Value by Follow-Up Status</div>
+      ${mgmtBarsHtml(valueByStatus, v => '₹'+formatINR(v))}
+    </div>
+
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Pipeline Value by State</div>
+      ${mgmtBarsHtml(valueByState, v => '₹'+formatINR(v))}
+    </div>
+  `;
+  $('#mgmtPanelContent').querySelectorAll('.mgmt-overdue-row').forEach(row => {
+    row.addEventListener('click', () => openNotesModal(row.dataset.sr));
+  });
+}
+
+// ============ Filter wiring ============
+['searchBox','stateFilter','cityFilter','appFilter','productFilter','statusFilter'].forEach(id => {
+  document.getElementById(id).addEventListener('input', applyFilters);
+  document.getElementById(id).addEventListener('change', applyFilters);
+});
+$('#clearBtn').addEventListener('click', () => {
+  $('#searchBox').value = '';
+  ['stateFilter','cityFilter','appFilter','productFilter','statusFilter'].forEach(id => document.getElementById(id).value = '');
+  applyFilters();
+});
+
+// ============ Init ============
+function renderAll(){
+  renderKPIs();
+  renderCharts();
+  renderMatrix();
+  renderInsight();
+  refreshFilterOptions();
+  applyFilters();
+}
+
+// ============ Connectivity ============
+// navigator.onLine only reflects whether the device's network interface is up
+// (e.g. connected to Wi-Fi), not whether the internet/Firestore is actually
+// reachable — but it catches the common, high-value case (airplane mode, no
+// SIM signal, Wi-Fi off) before the user ever starts typing, which is exactly
+// what protects them from silently unsynced edits.
+function updateOfflineUI(){
+  const offline = !navigator.onLine;
+  $('#offlineBanner').classList.toggle('show', offline);
+  if(offline){
+    if(!hasShownOfflineModal){
+      $('#offlineModal').classList.add('open');
+      hasShownOfflineModal = true;
+    }
+  } else {
+    $('#offlineModal').classList.remove('open');
+  }
+}
+let hasShownOfflineModal = false;
+window.addEventListener('online', updateOfflineUI);
+window.addEventListener('offline', updateOfflineUI);
+$('#offlineModalOkBtn').addEventListener('click', () => $('#offlineModal').classList.remove('open'));
+
+(async function init(){
+  updateOfflineUI(); // check connectivity FIRST, before anything else loads or the user can start editing
+  computeWorking();
+  APP_CATS = Object.entries(countBy(workingLeads,'Application Category')).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  renderAll(); // render immediately with base data so it's never blank once signed in
+  loadLocalFallback();
+  computeWorking();
+  renderAll();
+
+  // No free-text name entry anymore — identity now comes from a real, provisioned
+  // login (see handleAuthChange). The sign-in gate stays up (it opens by default in
+  // the HTML) until that resolves.
+  if(FIREBASE_ENABLED){
+    const ok = await loadFirebase();
+    if(!ok){
+      setSaveState('offline', 'Firebase failed to load — saved locally only');
+      $('#authLoginError').textContent = "Couldn't connect to the login service — check your internet connection and reload.";
+      $('#authLoginError').style.display = 'block';
+    }
+    // else: onAuthStateChanged (wired inside loadFirebase) drives everything from
+    // here — it keeps the gate up if signed out, or resolves the role and reveals
+    // the app once a valid, provisioned account signs in.
+  } else {
+    setSaveState('offline', 'Firebase not configured — saved locally only (see file comments)');
+    $('#authLoginError').textContent = 'Firebase is not configured in this file — sign-in is unavailable.';
+    $('#authLoginError').style.display = 'block';
+  }
+})();
+</script>
+</body>
+</html>
