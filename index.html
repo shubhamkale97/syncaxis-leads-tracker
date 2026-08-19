@@ -654,6 +654,7 @@
       <div style="display:flex; gap:8px; align-items:center;">
         <span class="result-count" id="resultCount"></span>
         <button class="btn" id="saveNowBtn" title="Immediately commit whatever field you're currently editing, instead of waiting for it to autosave">💾 Save Now</button>
+        <button class="btn" id="autofillEnquiryBtn" title="Generate an Enquiry Number for every lead that doesn't have one yet">🔢 Autofill Enquiry Numbers</button>
         <button class="btn" id="copyAllBtn">📋 COPY ALL DRAFTS</button>
         <button class="btn" id="exportBtn">⬇ CSV</button>
         <button class="btn" id="exportXlsxBtn">⬇ EXCEL</button>
@@ -1144,6 +1145,17 @@ function currentFYCode(){
   const d = new Date();
   const y = d.getFullYear();
   const startYear = d.getMonth() >= 3 ? y : y - 1; // April (month index 3) starts the FY
+  return String(startYear).slice(-2) + '-' + String(startYear + 1).slice(-2);
+}
+// Same FY-code logic, but for an arbitrary date (a lead's own Received Date) rather
+// than always today -- used by the Enquiry Number backfill below so an old lead gets
+// a number from the year it actually came in, not the year someone got around to
+// backfilling it. Falls back to today's FY if the date is missing/unparseable.
+function fyCodeForDate(dateStr){
+  const d = dateStr ? new Date(dateStr) : null;
+  if(!d || isNaN(d.getTime())) return currentFYCode();
+  const y = d.getFullYear();
+  const startYear = d.getMonth() >= 3 ? y : y - 1;
   return String(startYear).slice(-2) + '-' + String(startYear + 1).slice(-2);
 }
 
@@ -1642,6 +1654,7 @@ $('#saveNowBtn').addEventListener('click', () => {
   btn.classList.add('toast-copied');
   setTimeout(() => { btn.textContent = orig; btn.classList.remove('toast-copied'); }, 1200);
 });
+$('#autofillEnquiryBtn').addEventListener('click', () => autofillMissingEnquiryNumbers());
 
 function renderPreservingFocus(){
   renderKPIs(); renderCharts(); renderMatrix(); renderInsight(); refreshFilterOptions();
@@ -2521,6 +2534,62 @@ function suggestNextEnquiryNumber(){
   });
   return `${prefix}${String(maxN + 1).padStart(6, '0')}`;
 }
+
+// ---- Autofill Enquiry Numbers: bulk-backfill for leads that already exist without
+// one (migrated from the old sheet, entered in a hurry at the booth, etc.) rather
+// than requiring each one be typed in by hand. Uses each lead's own Received Date to
+// pick the financial year, so an old lead gets a number from the year it actually
+// came in -- not the year someone got around to backfilling it. One combined
+// Firestore write for the whole batch, same batching approach as Customer ID
+// reservation, instead of one round-trip per row. ----
+function autofillMissingEnquiryNumbers(){
+  if(!canWrite()){ blockedWriteNotice(); return; }
+  const missing = workingLeads.filter(r => !String(r['Enquiry Number'] || '').trim());
+  if(!missing.length){ showToast('Every lead already has an Enquiry Number.', 'success'); return; }
+  if(!confirm(`Generate Enquiry Numbers for ${missing.length} lead${missing.length===1?'':'s'} that don't have one yet? Each one stays individually editable afterwards.`)) return;
+
+  // Highest sequence number already used per FY prefix, so generated numbers
+  // continue on from real ones instead of colliding with them.
+  const maxSeqByFY = {};
+  workingLeads.forEach(r => {
+    const m = String(r['Enquiry Number'] || '').match(/^SYNC\/SI\/(\d{2}-\d{2})\/(\d+)$/);
+    if(m){ const fy = m[1], n = parseInt(m[2], 10); if(!maxSeqByFY[fy] || n > maxSeqByFY[fy]) maxSeqByFY[fy] = n; }
+  });
+  // Oldest-received-first so numbers within a year still ascend roughly the way
+  // they would have if entered at the time; undated ones sort last.
+  missing.sort((a, b) => {
+    const da = a['Received Date'] || '9999', db = b['Received Date'] || '9999';
+    return da !== db ? da.localeCompare(db) : Number(a['Sr.no']) - Number(b['Sr.no']);
+  });
+
+  const patch = {};
+  const stampedBy = currentUser || 'Teammate';
+  missing.forEach(r => {
+    const fy = fyCodeForDate(r['Received Date']);
+    const next = (maxSeqByFY[fy] || 0) + 1;
+    maxSeqByFY[fy] = next;
+    const enquiryNo = `SYNC/SI/${fy}/${String(next).padStart(6, '0')}`;
+    const key = String(r['Sr.no']);
+    if(!edits[key]) edits[key] = {};
+    edits[key]['Enquiry Number'] = enquiryNo;
+    editMeta[key] = { by: stampedBy, at: Date.now() };
+    patch[`edits.${key}.Enquiry Number`] = enquiryNo;
+    patch[`editMeta.${key}`] = fb ? { by: stampedBy, at: fb.serverTimestamp() } : { by: stampedBy, at: Date.now() };
+  });
+  computeWorking();
+  saveLocalFallback();
+  renderAll();
+  showToast(`Generated Enquiry Numbers for ${missing.length} lead${missing.length===1?'':'s'}.`, 'success');
+  if(fb && boardRef){
+    setSaveState('saving', 'Saving…');
+    writeToFirestore(patch).then(ok => {
+      setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+    });
+  } else {
+    setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+}
+
 // ---- Add Lead draft autosave: protects against losing everything typed if the
 // modal is closed by accident, the tab is closed, or the browser crashes mid-entry.
 // Saves locally (not to Firestore — it isn't a real lead yet) every 15s while the
@@ -3106,6 +3175,7 @@ function updateRoleUI(){
   $('#openCustomerMasterBtn').style.display = canWrite() ? '' : 'none';
   $('#signOutBtn').style.display = '';
   $('#addLeadBtn').style.display = canWrite() ? '' : 'none';
+  $('#autofillEnquiryBtn').style.display = canWrite() ? '' : 'none';
   ['#exportBtn','#exportXlsxBtn','#exportPdfBtn','#mgmtPanelExportBtn'].forEach(sel => {
     const el = $(sel);
     if(el) el.style.display = canDownload() ? '' : 'none';
