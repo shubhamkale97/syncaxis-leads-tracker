@@ -10,3 +10,7 @@
 !index.html
 !README.md
 !CNAME
+!manifest.json
+!sw.js
+!icons/
+!icons/*.png

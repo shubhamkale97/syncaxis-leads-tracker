@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Syncaxis Leads Tracker Intelligence Mechanism</title>
+
+<!-- PWA: installable on Android/iOS/iPadOS/desktop as a home-screen app. This is the
+     SAME app/file/URL, not a separate build -- every code change here reaches every
+     installed device the next time it has a connection, since sw.js is deliberately
+     network-first (see that file's own comment). -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12151b">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Syncaxis Leads">
+<meta name="mobile-web-app-capable" content="yes">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -562,6 +577,14 @@
 </head>
 <body>
 <script>(function(){try{var t=localStorage.getItem('exhibitionDashboardTheme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<script>
+  // PWA install support -- see sw.js for why this is deliberately network-first.
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => console.error('Service worker registration failed:', err));
+    });
+  }
+</script>
 <div class="offline-banner" id="offlineBanner">
   ⚠ No internet connection — you can keep viewing and editing, but nothing will sync to your team until you're back online.
 </div>

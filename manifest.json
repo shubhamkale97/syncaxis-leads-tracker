@@ -1,0 +1,17 @@
+{
+  "name": "Syncaxis Leads Tracker",
+  "short_name": "Syncaxis Leads",
+  "description": "Exhibition Follow-Up — Live Lead Tracker",
+  "start_url": ".",
+  "id": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#12151b",
+  "theme_color": "#12151b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
