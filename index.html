@@ -474,6 +474,22 @@
   .search-result-row:hover, .search-result-row.highlighted{ border-color: var(--blue); color: var(--text); }
   .search-result-row b{ color: var(--text); }
   .search-result-row .match-reason{ font-size:11px; color: var(--text-faint); margin-top:3px; }
+  .customer-list{ border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:18px; }
+  .customer-list-row{
+    display:grid; grid-template-columns: 110px 1.4fr 1fr 1fr 70px; gap:10px; align-items:center;
+    padding:8px 12px; border-bottom:1px solid var(--line-soft); font-size:12px; cursor:pointer; background: var(--panel);
+  }
+  .customer-list-row:last-child{ border-bottom:none; }
+  .customer-list-row:hover{ background: var(--panel-2); }
+  .customer-list-row.head{
+    font-family: var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.04em;
+    color: var(--text-faint); cursor:default; background: var(--panel-2);
+  }
+  .customer-list-row.head:hover{ background: var(--panel-2); }
+  .customer-list-id{ font-family: var(--font-mono); color: var(--text-faint); font-size:11px; }
+  @media (max-width:760px){ .customer-list-row{ grid-template-columns: 90px 1fr; grid-auto-rows:auto; } .customer-list-row > div:nth-child(3),.customer-list-row > div:nth-child(4){ grid-column: 1 / -1; } }
+  @keyframes customerCardFlash{ 0%{ box-shadow: 0 0 0 3px var(--amber); } 100%{ box-shadow: 0 0 0 0 transparent; } }
+  .customer-card.flash{ animation: customerCardFlash 1.4s ease-out; }
 </style>
 </head>
 <body>
@@ -3347,20 +3363,28 @@ $('#optionsManagerCloseBtn').addEventListener('click', () => $('#optionsManagerO
 // "highest number seen so far" guess — that matters here because two teammates could
 // realistically add leads for two different brand-new companies within the same
 // second, and a naive client-side max+1 could hand both of them the same code.
+// Reserves `count` sequential Customer IDs in ONE transaction (rather than one
+// transaction per ID) — used both for single new-customer creation and for the bulk
+// backfill below, which may need to mint dozens of codes at once without hammering
+// Firestore with a separate round-trip per code.
+async function reserveCustomerCodes(count){
+  if(count <= 0) return [];
+  const startBefore = await fb.runTransaction(fb.db, async tx => {
+    const snap = await tx.get(boardRef);
+    const current = (snap.exists() && snap.data().customerIdCounter) || 0;
+    tx.update(boardRef, { customerIdCounter: current + count });
+    return current;
+  });
+  return Array.from({length: count}, (_, i) => 'CUST-' + String(startBefore + i + 1).padStart(6, '0'));
+}
 async function allocateCustomerCode(){
   if(!fb || !boardRef){
     // Offline / Firebase-not-configured fallback — best effort from what's loaded locally.
     const n = Object.keys(customerMaster).length + 1;
     return 'CUST-' + String(n).padStart(6, '0');
   }
-  const next = await fb.runTransaction(fb.db, async tx => {
-    const snap = await tx.get(boardRef);
-    const current = (snap.exists() && snap.data().customerIdCounter) || 0;
-    const n = current + 1;
-    tx.update(boardRef, { customerIdCounter: n });
-    return n;
-  });
-  return 'CUST-' + String(next).padStart(6, '0');
+  const codes = await reserveCustomerCodes(1);
+  return codes[0];
 }
 function newContactId(){ return 'ct_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
 
@@ -3424,6 +3448,120 @@ async function upsertCustomerFromLead(rec, chosenContactId){
     await writeToFirestore({ [`customerMaster.${custId}.contacts.${contactId}`]: { department, contactPerson, designation: '', email, phone, notes: '' } });
   }
   return custId;
+}
+
+// One-time (repeatable) bulk backfill: Customer Master only ever grew from leads
+// added through "Add Lead" after this feature shipped — every lead entered before
+// that (the whole original seed dataset, plus anything added in between) never got
+// a customer record at all. This scans EVERY existing lead (base + added, with all
+// edits applied, ignoring the current user's own view-scope/filter so it always
+// covers the real full dataset) and builds/links Customer Master from them, exactly
+// like the live per-lead flow does, but as ONE batched Firestore write instead of
+// one round-trip per lead — hundreds of leads would otherwise take minutes and rack
+// up a write per lead.
+function normalizeCompanyKey(name){ return (name || '').trim().toLowerCase(); }
+async function backfillCustomerMasterFromLeads(){
+  if(!canWrite()){ blockedWriteNotice(); return { error: 'no-permission' }; }
+  if(!fb || !boardRef) return { error: 'offline' };
+
+  const applyEdits = row => { const e = edits[String(row['Sr.no'])]; return e ? Object.assign({}, row, e) : row; };
+  const allLeads = BASE_LEADS.map(applyEdits).concat(newLeads.map(applyEdits));
+
+  // Working copy of every customer touched this run, keyed by its real custId for
+  // pre-existing customers, or by a temporary placeholder for brand-new ones (swapped
+  // for a real reserved Customer ID once we know how many new ones are needed).
+  const working = {};
+  Object.entries(customerMaster).forEach(([cid, c]) => {
+    working[cid] = JSON.parse(JSON.stringify(c));
+    working[cid].contacts = working[cid].contacts || {};
+  });
+  const nameIndex = {};
+  Object.entries(working).forEach(([cid, c]) => { const k = normalizeCompanyKey(c.companyName); if(k) nameIndex[k] = cid; });
+
+  const pendingCreations = [];
+  const leadCustomerIdBySrno = {};
+  let newContactCount = 0;
+
+  allLeads.forEach(rec => {
+    const companyName = (rec['Company Name'] || '').trim();
+    if(!companyName) return;
+    const key = normalizeCompanyKey(companyName);
+    let custId = nameIndex[key];
+    if(!custId){
+      custId = `__PENDING_${pendingCreations.length}__`;
+      pendingCreations.push({ tempId: custId, companyName });
+      working[custId] = { companyName, country: rec['Country'] || '', state: rec['State'] || '', city: rec['City'] || '', address: '', contacts: {} };
+      nameIndex[key] = custId;
+    } else {
+      const w = working[custId];
+      if(rec['Country'] && !w.country) w.country = rec['Country'];
+      if(rec['State'] && !w.state) w.state = rec['State'];
+      if(rec['City'] && !w.city) w.city = rec['City'];
+    }
+    const w = working[custId];
+    const department = (rec['Department'] || '').trim();
+    const contactPerson = (rec['Visitor Name'] || '').trim();
+    const email = (rec['Email ID'] || '').trim();
+    const phone = (rec['Phone No.'] || '').trim();
+    if(department || contactPerson || email || phone){
+      const contacts = w.contacts;
+      const existingCtId = Object.keys(contacts).find(ctid => {
+        const c = contacts[ctid];
+        const sameEmail = email && (c.email || '').trim().toLowerCase() === email.toLowerCase();
+        const sameDeptPerson = (c.department || '').trim().toLowerCase() === department.toLowerCase()
+          && (c.contactPerson || '').trim().toLowerCase() === contactPerson.toLowerCase() && (department || contactPerson);
+        return sameEmail || sameDeptPerson;
+      });
+      if(existingCtId){
+        const c = contacts[existingCtId];
+        if(email && !c.email) c.email = email;
+        if(phone && !c.phone) c.phone = phone;
+      } else {
+        contacts[newContactId()] = { department, contactPerson, designation: '', email, phone, notes: '' };
+        newContactCount++;
+      }
+    }
+    if((rec['Customer ID'] || '') !== custId) leadCustomerIdBySrno[String(rec['Sr.no'])] = custId;
+  });
+
+  const codes = await reserveCustomerCodes(pendingCreations.length);
+  const tempToReal = {};
+  pendingCreations.forEach((p, i) => { tempToReal[p.tempId] = codes[i]; });
+  Object.keys(leadCustomerIdBySrno).forEach(srno => {
+    const cid = leadCustomerIdBySrno[srno];
+    if(tempToReal[cid]) leadCustomerIdBySrno[srno] = tempToReal[cid];
+  });
+
+  const patch = {};
+  pendingCreations.forEach(p => { patch[`customerMaster.${tempToReal[p.tempId]}`] = working[p.tempId]; });
+  Object.entries(working).forEach(([cid, w]) => {
+    if(cid.startsWith('__PENDING_')) return; // brand-new customers are written whole, above
+    const original = customerMaster[cid] || {};
+    if(w.country !== original.country) patch[`customerMaster.${cid}.country`] = w.country;
+    if(w.state !== original.state) patch[`customerMaster.${cid}.state`] = w.state;
+    if(w.city !== original.city) patch[`customerMaster.${cid}.city`] = w.city;
+    const origContacts = original.contacts || {};
+    Object.entries(w.contacts).forEach(([ctid, c]) => {
+      if(!origContacts[ctid]) patch[`customerMaster.${cid}.contacts.${ctid}`] = c;
+    });
+  });
+  Object.entries(leadCustomerIdBySrno).forEach(([srno, cid]) => {
+    patch[`edits.${srno}.Customer ID`] = cid;
+    patch[`editMeta.${srno}`] = { by: currentUser || 'Teammate', at: fb.serverTimestamp() };
+  });
+
+  if(Object.keys(patch).length) await writeToFirestore(patch);
+
+  // Reflect locally right away rather than waiting for the realtime listener.
+  pendingCreations.forEach(p => { customerMaster[tempToReal[p.tempId]] = working[p.tempId]; });
+  Object.entries(working).forEach(([cid, w]) => { if(!cid.startsWith('__PENDING_') && customerMaster[cid]) Object.assign(customerMaster[cid], w); });
+  Object.entries(leadCustomerIdBySrno).forEach(([srno, cid]) => {
+    if(!edits[srno]) edits[srno] = {};
+    edits[srno]['Customer ID'] = cid;
+  });
+  computeWorking();
+
+  return { newCompanyCount: pendingCreations.length, newContactCount, linkedLeadCount: Object.keys(leadCustomerIdBySrno).length };
 }
 
 // ---- Manage panel: view / add / edit / delete companies and their contacts ----
@@ -3504,23 +3642,47 @@ function renderCustomerMasterPanel(){
 
   let html = `
     <div class="section-note" style="margin-bottom:14px;">Every company and contact entered on a lead (Company Name, Department/Group, Contact Person, Email, Phone) is saved here automatically, so future leads for the same company can auto-fill from it. A company can have several departments, and each department can have its own contact person — every one of them is kept as its own separate entry here, not overwritten.</div>
-    <div style="display:flex; gap:10px; margin-bottom:16px;">
-      <input type="text" id="custMasterSearchInput" placeholder="Search company…" value="${escapeHtml(customerMasterSearch)}" style="flex:1;">
+    <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+      <input type="text" id="custMasterSearchInput" placeholder="Search company…" value="${escapeHtml(customerMasterSearch)}" style="flex:1; min-width:200px;">
       ${readOnly ? '' : `<button class="btn btn-primary" id="addNewCompanyBtn">+ ADD NEW COMPANY</button>`}
-    </div>`;
+      ${readOnly ? '' : `<button class="btn" id="customerMasterBackfillBtn" title="Scan every existing lead and add any company/contact still missing from Customer Master">🔄 Backfill from Existing Leads</button>`}
+    </div>
+    <div id="customerMasterBackfillStatus" class="section-note" style="display:none; margin-bottom:12px;"></div>`;
+
+  if(ids.length){
+    html += `
+      <div class="customer-list">
+        <div class="customer-list-row head">
+          <div>Customer ID</div><div>Company</div><div>Location</div><div>GSTIN</div><div>Contacts</div>
+        </div>
+        ${ids.map(cid => {
+          const c = customerMaster[cid];
+          const loc = [c.city, c.state, c.country].filter(Boolean).join(', ');
+          const contactCount = Object.keys(c.contacts || {}).length;
+          return `
+          <div class="customer-list-row" data-jump="${cid}">
+            <div class="customer-list-id">${escapeHtml(cid)}</div>
+            <div>${escapeHtml(c.companyName)}</div>
+            <div style="color:var(--text-faint);">${escapeHtml(loc) || '—'}</div>
+            <div style="color:var(--text-faint); font-family:var(--font-mono); font-size:11px;">${escapeHtml((c.gst && c.gst.gstin) || '') || '—'}</div>
+            <div>${contactCount}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
 
   if(editingCustomerId === 'NEW'){
     html += `<div class="mgmt-section"><div class="mgmt-section-title">New Company</div>${companyEditFormHtml('NEW')}</div>`;
   }
 
   if(!ids.length && editingCustomerId !== 'NEW'){
-    html += `<div class="section-note">No customers ${q ? 'match that search' : 'saved yet'} — they'll appear here as leads are added, or add one directly above.</div>`;
+    html += `<div class="section-note">No customers ${q ? 'match that search' : 'saved yet'} — they'll appear here as leads are added, or use "Backfill from Existing Leads" above to pull in companies from leads entered before this feature existed.</div>`;
   }
 
   ids.forEach(cid => {
     const c = customerMaster[cid];
     const contacts = Object.entries(c.contacts || {});
-    html += `<div class="customer-card">`;
+    html += `<div class="customer-card" id="customer-card-${cid}">`;
     if(editingCustomerId === cid){
       html += `<div class="mgmt-section-title">Edit Company</div>${companyEditFormHtml(cid)}`;
     } else {
@@ -3583,6 +3745,39 @@ function renderCustomerMasterPanel(){
   }
   const addNewBtn = $('#addNewCompanyBtn');
   if(addNewBtn) addNewBtn.addEventListener('click', () => { editingCustomerId = 'NEW'; renderCustomerMasterPanel(); });
+
+  content.querySelectorAll('.customer-list-row[data-jump]').forEach(row => {
+    row.addEventListener('click', () => {
+      const el = document.getElementById('customer-card-' + row.dataset.jump);
+      if(!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    });
+  });
+
+  const backfillBtn = $('#customerMasterBackfillBtn');
+  if(backfillBtn){
+    backfillBtn.addEventListener('click', async () => {
+      if(!confirm('Scan every existing lead (including the original seed data) and add any company or contact still missing from Customer Master? This only fills in gaps — it never overwrites or deletes anything already here.')) return;
+      backfillBtn.disabled = true;
+      const statusBefore = $('#customerMasterBackfillStatus');
+      if(statusBefore){ statusBefore.style.display = ''; statusBefore.textContent = 'Scanning every lead — this can take a moment for a large list…'; }
+      let message;
+      try{
+        const result = await backfillCustomerMasterFromLeads();
+        message = result && result.error === 'offline'
+          ? "Can't backfill right now — not connected to Firestore."
+          : `Done — added ${result.newCompanyCount} new compan${result.newCompanyCount === 1 ? 'y' : 'ies'}, ${result.newContactCount} new contact${result.newContactCount === 1 ? '' : 's'}, and linked ${result.linkedLeadCount} lead${result.linkedLeadCount === 1 ? '' : 's'} to its Customer ID.`;
+      }catch(err){
+        message = 'Backfill failed: ' + err.message;
+      }
+      // The panel re-render below rebuilds the whole DOM (including this status
+      // element), so grab the fresh one afterward rather than reusing the old node.
+      renderCustomerMasterPanel();
+      const statusAfter = $('#customerMasterBackfillStatus');
+      if(statusAfter){ statusAfter.style.display = ''; statusAfter.textContent = message; }
+    });
+  }
 
   content.querySelectorAll('.edit-company-btn').forEach(btn => btn.addEventListener('click', () => { editingCustomerId = btn.dataset.cust; editingContact = null; renderCustomerMasterPanel(); }));
   content.querySelectorAll('.delete-company-btn').forEach(btn => btn.addEventListener('click', async () => {
