@@ -61,6 +61,7 @@
     font-family: var(--font-body);
     line-height: 1.45;
     padding: 28px 32px 60px;
+    transition: background-color .25s ease, color .25s ease;
     background-image:
       radial-gradient(circle at 15% 0%, rgba(74,144,217,0.08), transparent 40%),
       radial-gradient(circle at 90% 10%, rgba(240,166,59,0.06), transparent 35%);
@@ -150,6 +151,36 @@
   }
   .offline-banner.show{ display:block; }
 
+  /* Theme toggle — fixed top-right, out of the header's button row entirely, so it
+     reads as a persistent "display setting" rather than another workflow action. */
+  .theme-toggle-fixed{
+    position:fixed; top:16px; right:16px; z-index:400; display:flex; gap:3px;
+    background: var(--panel); border:1px solid var(--line); border-radius:11px; padding:4px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.28);
+  }
+  .theme-toggle-fixed button{
+    width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    border:none; background:transparent; border-radius:8px; cursor:pointer; font-size:15px; line-height:1;
+    color: var(--text-faint); transition: background-color .15s ease, color .15s ease, transform .15s ease;
+  }
+  .theme-toggle-fixed button:hover{ background: var(--panel-2); color: var(--text); transform: translateY(-1px); }
+  .theme-toggle-fixed button.active{ background: var(--blue-dim); color: var(--blue-fg); }
+  @media (max-width:760px){ .theme-toggle-fixed{ top:auto; bottom:16px; right:16px; } }
+
+  /* Toast notifications — replace jarring native alert() popups with a small
+     animated stack in the corner, for anything that's a notice rather than a
+     yes/no decision (those still use confirm(), which genuinely needs to block). */
+  .toast-stack{ position:fixed; bottom:20px; right:20px; z-index:500; display:flex; flex-direction:column; gap:8px; align-items:flex-end; max-width:340px; }
+  .toast{
+    background: var(--panel); border:1px solid var(--line); border-left:3px solid var(--blue);
+    color: var(--text); padding:12px 16px; border-radius:10px; font-size:12.5px; line-height:1.45;
+    box-shadow: 0 10px 28px rgba(0,0,0,.32); opacity:0; transform: translateY(10px) scale(.97);
+    transition: opacity .25s ease, transform .25s ease; pointer-events:auto;
+  }
+  .toast.show{ opacity:1; transform: translateY(0) scale(1); }
+  .toast.toast-success{ border-left-color: var(--green); }
+  .toast.toast-error{ border-left-color: var(--red); }
+
   /* Fixed 6-column grid, not auto-fit: auto-fit stretches a short last row's tiles
      wider than the row above it whenever the tile count doesn't divide evenly,
      which looked inconsistent with 12 KPI tiles wrapping as 8+4. A fixed count
@@ -228,8 +259,10 @@
   .btn{
     font-family: var(--font-mono); font-size:11px; letter-spacing:.02em; cursor:pointer;
     border-radius: 7px; padding: 7px 12px; border:1px solid var(--line); background:none; color: var(--text-dim);
+    transition: color .15s ease, border-color .15s ease, background-color .15s ease, transform .15s ease, box-shadow .15s ease;
   }
-  .btn:hover{ color: var(--text); border-color: var(--text-faint); }
+  .btn:hover{ color: var(--text); border-color: var(--text-faint); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,.18); }
+  .btn:active{ transform: translateY(0); box-shadow:none; }
   .btn-primary{ background: var(--amber-dim); border-color: var(--amber-dim); color: var(--amber-fg); }
   .btn-primary:hover{ color: #fff; border-color: var(--amber); }
 
@@ -355,8 +388,11 @@
   /* modal */
   .modal-overlay{
     position:fixed; inset:0; background:rgba(8,10,14,0.72); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+    opacity:0; transition: opacity .18s ease;
   }
-  .modal-overlay.open{ display:flex; }
+  .modal-overlay.open{ display:flex; opacity:1; }
+  .modal-overlay.open .modal{ animation: modalPop .2s ease; }
+  @keyframes modalPop{ from{ opacity:0; transform: translateY(8px) scale(.97); } to{ opacity:1; transform: translateY(0) scale(1); } }
   /* This one modal can be opened from inside a full-screen .mgmt-overlay (Customer
      Master, z-index:210) rather than from the base page, so it needs to stack above
      that, not just above the base page like every other modal. */
@@ -415,8 +451,8 @@
 
   /* Management Panel — dark-themed, in-app style (distinct from the light print-styled
      PDF report), gated behind a real Firebase email/password sign-in. */
-  .mgmt-overlay{ position:fixed; inset:0; background: var(--bg); z-index:210; display:none; overflow-y:auto; }
-  .mgmt-overlay.open{ display:block; }
+  .mgmt-overlay{ position:fixed; inset:0; background: var(--bg); z-index:210; display:none; overflow-y:auto; opacity:0; transition: opacity .18s ease; }
+  .mgmt-overlay.open{ display:block; opacity:1; }
   .mgmt-toolbar{
     position:sticky; top:0; background: var(--panel); border-bottom:1px solid var(--line);
     padding:14px 24px; display:flex; justify-content:space-between; align-items:center; z-index:2;
@@ -504,6 +540,12 @@
 <div class="offline-banner" id="offlineBanner">
   ⚠ No internet connection — you can keep viewing and editing, but nothing will sync to your team until you're back online.
 </div>
+<div class="theme-toggle-fixed" id="themeToggle">
+  <button type="button" data-theme="dark" title="Dark mode">🌙</button>
+  <button type="button" data-theme="light" title="Light mode">☀</button>
+  <button type="button" data-theme="eye" title="Eye protection — warm, low-glare tones">🌿</button>
+</div>
+<div class="toast-stack" id="toastStack"></div>
 <div class="wrap">
 
   <header>
@@ -518,11 +560,6 @@
     </div>
     <div class="header-right">
       SOURCE<br><b>Exhibition_Data.xlsx</b>
-      <div class="matrix-toggle" id="themeToggle" style="margin:8px 0;">
-        <button type="button" data-theme="dark" title="Dark mode">🌙 Dark</button>
-        <button type="button" data-theme="light" title="Light mode">☀ Light</button>
-        <button type="button" data-theme="eye" title="Eye protection — warm, low-glare tones">🌿 Eye Care</button>
-      </div>
       <div class="mgmt-access" id="mgmtAccess">
         <button class="btn btn-primary" id="openMgmtPanelBtn" type="button" style="display:none;">Management Panel</button>
         <button class="btn btn-primary" id="openCustomerMasterBtn" type="button" style="display:none;">🏢 Customer Master</button>
@@ -1116,7 +1153,7 @@ function viewFilterFieldOptions(key){
 function isSuperAdmin(){ return currentRole === 'superadmin'; }
 function canManage(){ return currentRole === 'superadmin' || currentRole === 'management'; }
 function canWrite(){ return currentRole === 'superadmin' || currentRole === 'management' || currentRole === 'sales'; }
-function blockedWriteNotice(){ alert("You're signed in as a view-only user — you don't have permission to edit leads. Ask your admin if you need edit access."); }
+function blockedWriteNotice(){ showToast("You're signed in as a view-only user — you don't have permission to edit leads. Ask your admin if you need edit access.", 'error'); }
 
 // ---- Firebase (loaded dynamically so the file still works fully offline) ----
 let fb = null;         // { app, db, auth, doc, setDoc, updateDoc, onSnapshot, deleteField, serverTimestamp, getAuth, ... }
@@ -1931,14 +1968,14 @@ function applyFilters(){
 
 $('#copyAllBtn').addEventListener('click', () => {
   const withEmail = lastFiltered.filter(r => r['Email ID']);
-  if(!withEmail.length){ alert('No leads with an email address in the current filter.'); return; }
+  if(!withEmail.length){ showToast('No leads with an email address in the current filter.', 'error'); return; }
   const text = withEmail.map(r => draftText(r)).join('\n\n' + '—'.repeat(40) + '\n\n');
   navigator.clipboard.writeText(text).then(() => {
     const btn = $('#copyAllBtn');
     const orig = btn.textContent;
     btn.textContent = `✓ COPIED ${withEmail.length} DRAFTS`;
     setTimeout(() => { btn.textContent = orig; }, 1600);
-  }).catch(() => alert('Could not copy — your browser may be blocking clipboard access.'));
+  }).catch(() => showToast('Could not copy — your browser may be blocking clipboard access.', 'error'));
 });
 
 function srCellHtml(srno){
@@ -2047,7 +2084,7 @@ function wireRowEvents(){
           const parsed = parseINR(el.value);
           const wlCurrent = workingLeads.find(x => String(x['Sr.no']) === srno);
           if(parsed.error){
-            alert(parsed.error);
+            showToast(parsed.error, 'error');
             el.value = formatINR(wlCurrent ? wlCurrent['Lead Value'] : '');
             return;
           }
@@ -2459,9 +2496,9 @@ $('#saveAddBtn').addEventListener('click', () => {
     rec[f.key] = el.value.trim();
     if(f.required && !rec[f.key]) missing.push(f.label);
   });
-  if(missing.length){ alert('Please fill in: ' + missing.join(', ')); return; }
+  if(missing.length){ showToast('Please fill in: ' + missing.join(', '), 'error'); return; }
   const parsedLeadValue = parseINR(rec['Lead Value']);
-  if(parsedLeadValue.error){ alert(parsedLeadValue.error); return; }
+  if(parsedLeadValue.error){ showToast(parsedLeadValue.error, 'error'); return; }
   const nextSr = Math.max(BASE_MAX_SR, ...newLeads.map(x=>Number(x['Sr.no'])), BASE_MAX_SR) + 1;
   rec['Sr.no'] = nextSr;
   rec['Area (as recorded)'] = rec['Area (as recorded)'] || rec['City'];
@@ -2534,7 +2571,7 @@ function isFilterActive(){
 }
 let pendingExportKind = null;
 function requestExport(kind){
-  if(!canDownload()){ alert("Your account doesn't have permission to download data. Ask your Super Admin if you need this."); return; }
+  if(!canDownload()){ showToast("Your account doesn't have permission to download data. Ask your Super Admin if you need this.", 'error'); return; }
   if(!exportReady()) return;
   if(isFilterActive()){
     pendingExportKind = kind;
@@ -2622,7 +2659,7 @@ async function runExportXlsx(leads){
   const ok = await ensureSheetJS();
   btn.textContent = orig;
   if(!ok || !window.XLSX){
-    alert('Could not load the Excel export library — check your internet connection and try again.');
+    showToast('Could not load the Excel export library — check your internet connection and try again.', 'error');
     return;
   }
 
@@ -2983,7 +3020,7 @@ function updateRoleUI(){
 }
 
 async function submitAuthLogin(){
-  if(!fb || !fb.auth){ alert("Firebase isn't connected right now — try again in a moment."); return; }
+  if(!fb || !fb.auth){ showToast("Firebase isn't connected right now — try again in a moment.", 'error'); return; }
   const email = $('#authEmailInput').value.trim();
   const password = $('#authPasswordInput').value;
   const errBox = $('#authLoginError');
@@ -3077,6 +3114,22 @@ document.querySelectorAll('#themeToggle button').forEach(btn => {
   btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
 });
 applyTheme(document.documentElement.getAttribute('data-theme') || 'dark'); // sync the toggle's active state on load
+
+// ============ Toast notifications — replaces native alert() for anything that's a
+// notice, not a yes/no decision (confirm() dialogs still block, intentionally). ============
+function showToast(message, type){
+  const stack = $('#toastStack');
+  if(!stack){ return; } // extreme fallback, should never happen
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'success' ? ' toast-success' : type === 'error' ? ' toast-error' : '');
+  el.textContent = message;
+  stack.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 260);
+  }, 3600);
+}
 
 // ============ Management Panel ============
 $('#openMgmtPanelBtn').addEventListener('click', () => {
@@ -3256,7 +3309,7 @@ async function renderSuperAdminPanel(){
       if(scopeSel) scopeSel.disabled = sel.value !== 'sales';
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { role: sel.value }, { merge: true });
-      }catch(err){ alert('Could not update role: ' + err.message); }
+      }catch(err){ showToast('Could not update role: ' + err.message, 'error'); }
     });
   });
   content.querySelectorAll('.scope-select').forEach(sel => {
@@ -3264,7 +3317,7 @@ async function renderSuperAdminPanel(){
       const uid = sel.dataset.uid;
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { scope: sel.value }, { merge: true });
-      }catch(err){ alert('Could not update scope: ' + err.message); }
+      }catch(err){ showToast('Could not update scope: ' + err.message, 'error'); }
     });
   });
   content.querySelectorAll('.toggle-disable-btn').forEach(btn => {
@@ -3274,7 +3327,7 @@ async function renderSuperAdminPanel(){
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { disabled: !wasDisabled }, { merge: true });
         renderSuperAdminPanel();
-      }catch(err){ alert('Could not update status: ' + err.message); }
+      }catch(err){ showToast('Could not update status: ' + err.message, 'error'); }
     });
   });
   content.querySelectorAll('.reset-pw-btn').forEach(btn => {
@@ -3288,7 +3341,7 @@ async function renderSuperAdminPanel(){
         btn.textContent = '✓ Email sent';
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
       }catch(err){
-        alert('Could not send reset email: ' + err.message);
+        showToast('Could not send reset email: ' + err.message, 'error');
         btn.textContent = orig; btn.disabled = false;
       }
     });
@@ -3301,7 +3354,7 @@ async function renderSuperAdminPanel(){
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { canDownload: val }, { merge: true });
       }catch(err){
-        alert('Could not update download permission: ' + err.message);
+        showToast('Could not update download permission: ' + err.message, 'error');
         cb.checked = !val;
       }
       cb.disabled = false;
@@ -3315,7 +3368,7 @@ async function renderSuperAdminPanel(){
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { canManageOptions: val }, { merge: true });
       }catch(err){
-        alert('Could not update permission: ' + err.message);
+        showToast('Could not update permission: ' + err.message, 'error');
         cb.checked = !val;
       }
       cb.disabled = false;
@@ -3329,7 +3382,7 @@ async function renderSuperAdminPanel(){
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { canDelete: val }, { merge: true });
       }catch(err){
-        alert('Could not update delete permission: ' + err.message);
+        showToast('Could not update delete permission: ' + err.message, 'error');
         cb.checked = !val;
       }
       cb.disabled = false;
@@ -3345,7 +3398,7 @@ async function renderSuperAdminPanel(){
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { viewFilter }, { merge: true });
         renderSuperAdminPanel();
       }catch(err){
-        alert('Could not save filter: ' + err.message);
+        showToast('Could not save filter: ' + err.message, 'error');
         btn.textContent = orig; btn.disabled = false;
       }
     });
@@ -3385,7 +3438,7 @@ async function renderSuperAdminPanel(){
 }
 
 async function addCustomOption(inputId, fieldName){
-  if(!canManageOptionsUI()){ alert("You don't have permission to manage dropdown options."); return; }
+  if(!canManageOptionsUI()){ showToast("You don't have permission to manage dropdown options.", 'error'); return; }
   const input = $('#' + inputId);
   const val = input.value.trim();
   if(!val) return;
@@ -3393,7 +3446,7 @@ async function addCustomOption(inputId, fieldName){
     await fb.updateDoc(boardRef, { [fieldName]: fb.arrayUnion(val) });
     input.value = '';
     renderOptionsManagerPanel();
-  }catch(err){ alert('Could not add option: ' + err.message); }
+  }catch(err){ showToast('Could not add option: ' + err.message, 'error'); }
 }
 
 // ============ Manage Dropdown Options — superadmin, or anyone delegated via
@@ -3781,7 +3834,7 @@ function renderCustomerMasterPanel(){
 
   content.querySelectorAll('.edit-company-btn').forEach(btn => btn.addEventListener('click', () => openCustomerEditModal(btn.dataset.cust)));
   content.querySelectorAll('.delete-company-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if(!canDeleteUI()){ alert("You don't have permission to delete — ask your Super Admin to grant it if you need it."); return; }
+    if(!canDeleteUI()){ showToast("You don't have permission to delete — ask your Super Admin to grant it if you need it.", 'error'); return; }
     const cid = btn.dataset.cust;
     const snapshot = customerMaster[cid];
     if(!confirm(`Delete "${snapshot.companyName}" and all its contacts from Customer Master? This does not affect any existing lead records, and a Super Admin can restore it from the Activity Log if needed.`)) return;
@@ -3916,7 +3969,7 @@ function renderCustomerEditContacts(){
   box.querySelectorAll('.edit-contact-btn').forEach(btn => btn.addEventListener('click', () => { editingContact = { custId, contactId: btn.dataset.contact }; renderCustomerEditContacts(); }));
   box.querySelectorAll('.add-contact-btn').forEach(btn => btn.addEventListener('click', () => { editingContact = { custId, contactId: 'NEW' }; renderCustomerEditContacts(); }));
   box.querySelectorAll('.delete-contact-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if(!canDeleteUI()){ alert("You don't have permission to delete — ask your Super Admin to grant it if you need it."); return; }
+    if(!canDeleteUI()){ showToast("You don't have permission to delete — ask your Super Admin to grant it if you need it.", 'error'); return; }
     const ctid = btn.dataset.contact;
     const snapshot = customerMaster[custId].contacts[ctid];
     if(!confirm(`Delete "${snapshot.contactPerson || snapshot.department || 'this contact'}" from Customer Master? A Super Admin can restore it from the Activity Log if needed.`)) return;
@@ -3953,7 +4006,7 @@ function renderCustomerEditContacts(){
 }
 $('#customerEditSaveBtn').addEventListener('click', async () => {
   const companyName = $('#custEdit-companyName').value.trim();
-  if(!companyName){ alert('Customer Name is required.'); return; }
+  if(!companyName){ showToast('Customer Name is required.', 'error'); return; }
   const latVal = $('#custEdit-lat').value.trim(), lngVal = $('#custEdit-lng').value.trim();
   const fields = {
     companyName,
@@ -4060,7 +4113,7 @@ function renderActivityLogPanel(){
         await logActivity('restore-customer', entry.label, { custId: entry.custId });
       } else if(entry.action === 'delete-contact'){
         if(!customerMaster[entry.custId]){
-          alert("Can't restore — the customer this contact belonged to no longer exists. Restore or re-add that customer first.");
+          showToast("Can't restore — the customer this contact belonged to no longer exists. Restore or re-add that customer first.", 'error');
           btn.disabled = false; btn.textContent = orig;
           return;
         }
@@ -4074,7 +4127,7 @@ function renderActivityLogPanel(){
       renderCustomerMasterPanel();
       renderActivityLogPanel();
     }catch(err){
-      alert('Restore failed: ' + err.message);
+      showToast('Restore failed: ' + err.message, 'error');
       btn.disabled = false; btn.textContent = orig;
     }
   }));
@@ -4152,7 +4205,7 @@ async function submitAddUser(){
       disabled: false, createdAt: fb.serverTimestamp(), createdBy: currentUserEmail,
     });
     await fb.setDoc(fb.doc(fb.db, TEAM_DIRECTORY_COLLECTION, newUid), { displayName: name });
-    alert(`${name} was added. They'll get an email at ${email} to set their password before signing in.`);
+    showToast(`${name} was added. They'll get an email at ${email} to set their password before signing in.`, 'success');
     renderSuperAdminPanel();
   }catch(err){
     const messages = {
