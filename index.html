@@ -641,7 +641,11 @@
     <div class="section-note">This dashboard is restricted to invited team members — it isn't open to anyone with the link. Sign in with the email &amp; password your admin gave you. This is a real Firebase login: wrong attempts are rejected server-side and automatically rate-limited.</div>
     <div class="form-field"><label>Email</label><input type="email" id="authEmailInput" placeholder="you@syncaxis.com" autocomplete="username"></div>
     <div class="form-field" style="margin-top:10px;"><label>Password</label><input type="password" id="authPasswordInput" placeholder="••••••••" autocomplete="current-password"></div>
+    <div style="text-align:right; margin-top:6px;">
+      <button type="button" id="authForgotPasswordBtn" style="background:none; border:none; color:var(--blue); font-family:var(--font-mono); font-size:11px; cursor:pointer; padding:0; text-decoration:underline;">Forgot password?</button>
+    </div>
     <div class="section-note" id="authLoginError" style="color:var(--red); display:none; margin-top:8px;"></div>
+    <div class="section-note" id="authForgotStatus" style="display:none; margin-top:8px;"></div>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-primary" id="authLoginSubmitBtn">SIGN IN</button>
     </div>
@@ -2451,10 +2455,12 @@ async function handleAuthChange(user){
 function showAuthGate(){
   $('#authGateOverlay').classList.add('open');
   $('#mgmtAccess').style.display = 'none';
+  $('#authForgotStatus').style.display = 'none';
 }
 function hideAuthGate(){
   $('#authGateOverlay').classList.remove('open');
   $('#authLoginError').style.display = 'none';
+  $('#authForgotStatus').style.display = 'none';
   $('#authEmailInput').value = ''; $('#authPasswordInput').value = '';
 }
 function updateRoleUI(){
@@ -2502,6 +2508,49 @@ async function submitAuthLogin(){
 }
 $('#authLoginSubmitBtn').addEventListener('click', submitAuthLogin);
 $('#authPasswordInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') submitAuthLogin(); });
+
+// Self-service password reset, right on the login screen — for everyone EXCEPT the
+// superadmin account, which is deliberately excluded from this automated flow (its
+// password is only ever changed by hand in the Firebase Console, since it's the one
+// account that could otherwise lock the whole permission system out of itself).
+$('#authForgotPasswordBtn').addEventListener('click', async () => {
+  const email = $('#authEmailInput').value.trim();
+  const status = $('#authForgotStatus');
+  const errBox = $('#authLoginError');
+  errBox.style.display = 'none';
+  status.style.display = 'block';
+  if(!email){ status.style.color = 'var(--red)'; status.textContent = 'Enter your email above first, then click "Forgot password?".'; return; }
+  if(email.toLowerCase() === SUPERADMIN_EMAIL.toLowerCase()){
+    status.style.color = 'var(--red)';
+    status.textContent = "The superadmin account can't be reset from this page — its password is changed directly in the Firebase Console.";
+    return;
+  }
+  if(!fb || !fb.auth){ status.style.color = 'var(--red)'; status.textContent = "Firebase isn't connected right now — try again in a moment."; return; }
+  const btn = $('#authForgotPasswordBtn');
+  const orig = btn.textContent;
+  btn.textContent = 'Sending…'; btn.disabled = true;
+  try{
+    await fb.sendPasswordResetEmail(fb.auth, email);
+    status.style.color = 'var(--green)';
+    status.textContent = `If ${email} has access, a password reset link was just sent to it.`;
+  }catch(err){
+    // Firebase's email-enumeration protection means "no such account" and "sent" often
+    // look identical on purpose — only surface genuinely actionable errors here.
+    const messages = {
+      'auth/invalid-email': "That doesn't look like a valid email address.",
+      'auth/too-many-requests': 'Too many attempts — try again in a few minutes.',
+      'auth/network-request-failed': 'Network error — check your connection and try again.',
+    };
+    if(messages[err.code]){
+      status.style.color = 'var(--red)';
+      status.textContent = messages[err.code];
+    } else {
+      status.style.color = 'var(--green)';
+      status.textContent = `If ${email} has access, a password reset link was just sent to it.`;
+    }
+  }
+  btn.textContent = orig; btn.disabled = false;
+});
 
 $('#signOutBtn').addEventListener('click', async () => {
   $('#mgmtPanelOverlay').classList.remove('open');
