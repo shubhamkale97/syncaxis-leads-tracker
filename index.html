@@ -413,6 +413,28 @@
   .form-field input:focus, .form-field select:focus, .form-field textarea:focus{ border-color: var(--blue); }
   .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
 
+  /* Checkbox-list — replaces a native <select multiple> for the region-restriction
+     filter. A native multi-select needs a hidden Ctrl/Cmd-click gesture to pick more
+     than one value, which most people never discover; a checkbox per option needs no
+     gesture at all and works identically with mouse, keyboard, or touch. Same bordered,
+     fixed-height, scrollable footprint as the select it replaces. */
+  .filter-select-all-row{ display:flex; gap:10px; margin-bottom:4px; }
+  .filter-select-all-row button{
+    background:none; border:none; padding:0; font-family: var(--font-mono); font-size:10px;
+    text-transform:uppercase; letter-spacing:.03em; color: var(--blue-fg); cursor:pointer;
+  }
+  .filter-select-all-row button:hover{ text-decoration:underline; }
+  .checkbox-list{
+    width:100%; background: var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    max-height:112px; overflow-y:auto; padding:4px;
+  }
+  .checkbox-list-item{
+    display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:5px;
+    font-size:12.5px; color: var(--text); cursor:pointer;
+  }
+  .checkbox-list-item:hover{ background: var(--panel); }
+  .checkbox-list-item input{ width:auto; margin:0; flex-shrink:0; }
+
   footer{ text-align:center; color: var(--text-faint); font-size:11px; margin-top: 30px; font-family: var(--font-mono); line-height:1.9; }
   .dev-credit{ border-bottom:1px dotted var(--text-faint); cursor:help; color: var(--text-dim); }
 
@@ -3346,23 +3368,50 @@ $('#openSuperAdminBtn').addEventListener('click', () => {
 });
 $('#superAdminCloseBtn').addEventListener('click', () => $('#superAdminOverlay').classList.remove('open'));
 
+// Checkboxes, not a native <select multiple> -- a multi-select needs a hidden
+// Ctrl/Cmd-click to pick more than one value, which most people never discover and
+// reads as "there's no way to pick more than one." A checkbox per option needs no
+// gesture at all: click/tap any of them, independent of the others. "Select all" /
+// "Clear" are just a convenience -- functionally identical to checking every box by
+// hand or leaving none checked (both mean "no restriction" once read back).
 function viewFilterBuilderHtml(idPrefix, current){
   current = current || {};
   return VIEW_FILTER_FIELDS.map(f => {
     const opts = viewFilterFieldOptions(f.key);
     const selected = new Set(current[f.key] || []);
-    return `<div class="form-field"><label>${f.label} (blank = all)</label>
-      <select id="${idPrefix}-${slug(f.key)}" multiple size="4">
-        ${opts.map(o => `<option value="${escapeHtml(o)}" ${selected.has(o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}
-      </select></div>`;
+    const listId = `${idPrefix}-${slug(f.key)}`;
+    return `<div class="form-field">
+      <label>${f.label} (none checked = all)</label>
+      <div class="filter-select-all-row">
+        <button type="button" class="filter-select-all-btn" data-target="${listId}">Select all</button>
+        <button type="button" class="filter-clear-btn" data-target="${listId}">Clear</button>
+      </div>
+      <div class="checkbox-list" id="${listId}">
+        ${opts.map((o, i) => `<label class="checkbox-list-item"><input type="checkbox" value="${escapeHtml(o)}" id="${listId}-${i}" ${selected.has(o)?'checked':''}> ${escapeHtml(o)}</label>`).join('')}
+      </div>
+    </div>`;
   }).join('');
+}
+function wireViewFilterBuilderButtons(root){
+  (root || document).querySelectorAll('.filter-select-all-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const list = document.getElementById(btn.dataset.target);
+      if(list) list.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; });
+    });
+  });
+  (root || document).querySelectorAll('.filter-clear-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const list = document.getElementById(btn.dataset.target);
+      if(list) list.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    });
+  });
 }
 function readViewFilterBuilder(idPrefix){
   const vf = {};
   VIEW_FILTER_FIELDS.forEach(f => {
-    const el = $(`#${idPrefix}-${slug(f.key)}`);
-    if(!el) return;
-    const vals = Array.from(el.selectedOptions).map(o => o.value);
+    const list = $(`#${idPrefix}-${slug(f.key)}`);
+    if(!list) return;
+    const vals = [...list.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
     if(vals.length) vf[f.key] = vals;
   });
   return vf;
@@ -3376,8 +3425,8 @@ function viewFilterSummary(vf){
 // opened before that first sync lands -- or a teammate adds a lead with a brand new
 // state/city while the panel is already open -- those boxes render empty and stay
 // that way forever, since nothing was refreshing them. Called on every realtime
-// sync tick; refreshes just the <option> lists of the already-rendered filter
-// selects IN PLACE (both the 'Add New User' builder and every existing user's
+// sync tick; refreshes just the checkbox lists of the already-rendered filter
+// builders IN PLACE (both the 'Add New User' builder and every existing user's
 // editor), preserving whatever's already checked, WITHOUT re-rendering the whole
 // panel or re-fetching the users list -- so it can never wipe out an admin's
 // in-progress typing elsewhere in the form.
@@ -3387,10 +3436,10 @@ function refreshViewFilterSelectOptions(){
   VIEW_FILTER_FIELDS.forEach(f => {
     const suffix = '-' + slug(f.key);
     const freshOptions = viewFilterFieldOptions(f.key);
-    document.querySelectorAll('#superAdminContent select[multiple]').forEach(sel => {
-      if(!sel.id.endsWith(suffix)) return;
-      const selectedNow = new Set([...sel.selectedOptions].map(o => o.value));
-      sel.innerHTML = freshOptions.map(o => `<option value="${escapeHtml(o)}" ${selectedNow.has(o) ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('');
+    document.querySelectorAll('#superAdminContent .checkbox-list').forEach(list => {
+      if(!list.id.endsWith(suffix)) return;
+      const checkedNow = new Set([...list.querySelectorAll('input:checked')].map(cb => cb.value));
+      list.innerHTML = freshOptions.map((o, i) => `<label class="checkbox-list-item"><input type="checkbox" value="${escapeHtml(o)}" id="${list.id}-${i}" ${checkedNow.has(o) ? 'checked' : ''}> ${escapeHtml(o)}</label>`).join('');
     });
   });
 }
@@ -3445,7 +3494,7 @@ async function renderSuperAdminPanel(){
         </div>
       </div>
       <div id="newUserFilterField" style="display:none; margin-top:14px;">
-        <div class="section-note" style="margin-bottom:10px;">Optional: restrict what this person sees — e.g. confine a salesperson to Country=India + State=Gujarat. Select nothing in a field to leave it unrestricted. Ctrl/Cmd-click to pick multiple values in one field (matched as OR); fields you do set are combined with AND — e.g. State=Maharashtra + Product=Dobot shows only Dobot leads in Maharashtra.</div>
+        <div class="section-note" style="margin-bottom:10px;">Optional: restrict what this person sees — e.g. confine a salesperson to Country=India + State=Gujarat. Check as many boxes as you want in a field (matched as OR) — leave every box unchecked to leave that field unrestricted. Fields you do set are combined with AND — e.g. State=Maharashtra + Product=Dobot shows only Dobot leads in Maharashtra.</div>
         <div class="form-grid">${viewFilterBuilderHtml('newUserFilter', {})}</div>
       </div>
       <div style="margin-top:14px; display:flex; align-items:center; gap:8px;">
@@ -3527,6 +3576,7 @@ async function renderSuperAdminPanel(){
   // uid to work with, `users` (the array this whole panel was rendered from) is
   // still in scope via closure.
   const targetLabel = uid => { const u = users.find(x => x.uid === uid); return (u && (u.displayName || u.email)) || uid; };
+  wireViewFilterBuilderButtons(content);
 
   content.querySelectorAll('.role-select').forEach(sel => {
     sel.addEventListener('change', async () => {
