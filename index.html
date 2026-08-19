@@ -3336,7 +3336,22 @@ function renderCustomerMasterPanel(){
   }));
 
   const gstPortalBtn = $('#custEditGstPortalBtn');
-  if(gstPortalBtn) gstPortalBtn.addEventListener('click', () => window.open('https://services.gst.gov.in/services/searchtp', '_blank', 'noopener'));
+  if(gstPortalBtn){
+    gstPortalBtn.addEventListener('click', () => {
+      const gstin = $('#custEdit-gstin').value.trim();
+      const openPortal = () => window.open('https://services.gst.gov.in/services/searchtp', '_blank', 'noopener');
+      if(!gstin){ openPortal(); return; }
+      // Copy the GSTIN to the clipboard first so it's a straight paste into the
+      // portal's search box, then open the portal in a new tab right after.
+      navigator.clipboard.writeText(gstin).then(() => {
+        const orig = gstPortalBtn.textContent;
+        gstPortalBtn.textContent = '✓ Copied — opening portal…';
+        gstPortalBtn.classList.add('toast-copied');
+        setTimeout(() => { gstPortalBtn.textContent = orig; gstPortalBtn.classList.remove('toast-copied'); }, 1500);
+        openPortal();
+      }).catch(() => openPortal());
+    });
+  }
 
   const custSaveBtn = $('#custEditSaveBtn');
   if(custSaveBtn){
