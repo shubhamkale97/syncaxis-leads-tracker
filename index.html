@@ -3470,9 +3470,19 @@ async function renderSuperAdminPanel(){
       <div class="section-note">Moved to its own panel — click <b>🏷 Manage Options</b> in the header. You can also delegate that panel to specific team members below, without giving them full Super Admin access.</div>
     </div>`;
 
+  const leadSourceBackfillMissing = workingLeads.filter(r => !String(r['Inquiry Source'] || '').trim()).length;
+  const leadSourceBackfillSection = `
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">Lead Data Maintenance</div>
+      <div class="section-note" style="margin-bottom:14px;">This is an exhibition lead tracker, so an existing lead with no Inquiry Source recorded almost certainly came from an exhibition booth. One-time: sets Inquiry Source = "Exhibition Booth" for every lead that doesn't have a source yet (currently ${leadSourceBackfillMissing}) — leaves any lead that already has a source (Website, Referral, etc.) completely untouched. Safe to click more than once; leads already backfilled won't be touched again.</div>
+      <button class="btn" id="backfillSourceBtn" ${leadSourceBackfillMissing ? '' : 'disabled'}>Set Blank Sources to "Exhibition Booth"${leadSourceBackfillMissing ? ` (${leadSourceBackfillMissing})` : ''}</button>
+      <div class="section-note" id="backfillSourceStatus" style="margin-top:10px;"></div>
+    </div>`;
+
   content.innerHTML = `
     ${migrationBanner}
     ${dropdownOptionsSection}
+    ${leadSourceBackfillSection}
     <div class="mgmt-section">
       <div class="mgmt-section-title">Add a New User</div>
       <div class="section-note" style="margin-bottom:14px;">No password is ever typed or shared here — they get an email at the address you enter, to set their own password before their first sign-in.</div>
@@ -3716,6 +3726,38 @@ async function renderSuperAdminPanel(){
       status.textContent = 'Backfill failed: ' + err.message;
     }
     btn.disabled = false;
+  });
+
+  const backfillSourceBtn = $('#backfillSourceBtn');
+  if(backfillSourceBtn) backfillSourceBtn.addEventListener('click', async () => {
+    const status = $('#backfillSourceStatus');
+    const missing = workingLeads.filter(r => !String(r['Inquiry Source'] || '').trim());
+    if(!missing.length){ status.textContent = 'Every lead already has a source set — nothing to do.'; return; }
+    if(!confirm(`Set Inquiry Source to "Exhibition Booth" for ${missing.length} lead${missing.length===1?'':'s'} that don't have one yet? Leads that already have a source are left untouched.`)) return;
+    backfillSourceBtn.disabled = true;
+    status.textContent = 'Working…';
+    const patch = {};
+    const stampedBy = currentUser || 'Teammate';
+    missing.forEach(r => {
+      const key = String(r['Sr.no']);
+      if(!edits[key]) edits[key] = {};
+      edits[key]['Inquiry Source'] = 'Exhibition Booth';
+      editMeta[key] = { by: stampedBy, at: Date.now() };
+      patch[`edits.${key}.Inquiry Source`] = 'Exhibition Booth';
+      patch[`editMeta.${key}`] = fb ? { by: stampedBy, at: fb.serverTimestamp() } : { by: stampedBy, at: Date.now() };
+    });
+    computeWorking();
+    saveLocalFallback();
+    renderPreservingFocus();
+    try{
+      const ok = (fb && boardRef) ? await writeToFirestore(patch) : false;
+      status.textContent = ok
+        ? `Done — set the source for ${missing.length} lead${missing.length===1?'':'s'}.`
+        : ((fb && boardRef) ? 'Saved locally — sync to the team failed, will retry.' : 'Saved locally — Firebase not configured.');
+    }catch(err){
+      status.textContent = 'Could not save: ' + err.message;
+    }
+    renderSuperAdminPanel();
   });
 
 }
