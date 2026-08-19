@@ -18,15 +18,41 @@
     --text-faint: #626c7d;
     --amber: #f0a63b;
     --amber-dim: #6b5327;
+    --amber-fg: #f6c47f;
     --blue: #4a90d9;
     --blue-dim: #294059;
+    --blue-fg: #cfe0f5;
     --green: #4cb782;
     --green-dim: #204632;
     --red: #d96a6a;
     --red-dim: #4a2b2b;
+    --red-fg: #ffd9d9;
+    --purple: #c9a4f0;
     --font-display: 'Space Grotesk', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
+  }
+  /* Light mode — clean, professional, same accent hues re-tuned for a white/light
+     background (dim badge backgrounds go pale, badge text goes dark, for contrast). */
+  html[data-theme="light"]{
+    --bg: #f4f6f9; --panel: #ffffff; --panel-2: #eef1f6; --line: #d7dce4; --line-soft: #e4e8ee;
+    --text: #171b23; --text-dim: #4d5768; --text-faint: #8993a4;
+    --amber: #b8730f; --amber-dim: #fbe4bc; --amber-fg: #7a4a08;
+    --blue: #1f6fb5; --blue-dim: #d9e9fa; --blue-fg: #144d80;
+    --green: #1a8f5a; --green-dim: #d7f3e4;
+    --red: #c23d3d; --red-dim: #f9dcdc; --red-fg: #8a2424;
+    --purple: #7c4fb0;
+  }
+  /* Eye-protection mode — warm, low-contrast, sepia/paper tones (reduced blue light),
+     similar to an e-reader's "warm" or "night light" display mode. */
+  html[data-theme="eye"]{
+    --bg: #f2e8d5; --panel: #faf3e4; --panel-2: #ede0c8; --line: #d8c7a3; --line-soft: #e3d4b3;
+    --text: #3b2f1f; --text-dim: #6b5a3f; --text-faint: #94825f;
+    --amber: #a56a1a; --amber-dim: #e8cf9c; --amber-fg: #5c3a0a;
+    --blue: #4a6f8a; --blue-dim: #d8e2df; --blue-fg: #2c4a5c;
+    --green: #5a7d3f; --green-dim: #e0ead0;
+    --red: #a8503a; --red-dim: #ecdac8; --red-fg: #6b2f1a;
+    --purple: #8a6b46;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
@@ -80,7 +106,7 @@
   .notes-btn:hover{ border-color: var(--line-soft); color: var(--text); background: var(--panel-2); }
   .notes-preview-line{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .notes-btn .notes-count{
-    display:inline-block; background: var(--blue-dim); color:#cfe0f5; font-family: var(--font-mono); font-size:10px;
+    display:inline-block; background: var(--blue-dim); color:var(--blue-fg); font-family: var(--font-mono); font-size:10px;
     border-radius:20px; padding:1px 6px; margin-right:6px;
   }
   .notes-next-followup{
@@ -118,7 +144,7 @@
   @media (max-width:760px){ .followup-item{ flex-direction:column; align-items:flex-start; } .followup-item-meta{ text-align:left; } }
 
   .offline-banner{
-    display:none; position:sticky; top:0; z-index:300; background: var(--red-dim); color:#ffd9d9;
+    display:none; position:sticky; top:0; z-index:300; background: var(--red-dim); color:var(--red-fg);
     border-bottom:1px solid var(--red); text-align:center; font-family: var(--font-mono); font-size:12px;
     padding:9px 14px; line-height:1.4;
   }
@@ -175,7 +201,7 @@
     font-family: var(--font-mono); font-size: 11px; padding:5px 10px; border-radius:6px; border:none;
     background:transparent; color:var(--text-faint); cursor:pointer; letter-spacing:0.03em;
   }
-  .matrix-toggle button.active{ background: var(--blue-dim); color: #cfe0f5; }
+  .matrix-toggle button.active{ background: var(--blue-dim); color: var(--blue-fg); }
   .matrix-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:8px; }
   table.matrix{ border-collapse: collapse; width:100%; font-size: 11.5px; }
   table.matrix th, table.matrix td{ padding: 7px 8px; text-align:center; border: 1px solid var(--line-soft); white-space:nowrap; }
@@ -183,7 +209,7 @@
   table.matrix th.rowhead, table.matrix td.rowhead{ text-align:left; position:sticky; left:0; background: var(--panel-2); color: var(--text); font-weight:600; z-index:2; }
   table.matrix td.cell{ font-family: var(--font-mono); cursor:pointer; color: var(--text-dim); }
   table.matrix td.cell:hover{ outline: 1px solid var(--amber); outline-offset:-1px; }
-  table.matrix td.cell.zero{ color: #3a4150; }
+  table.matrix td.cell.zero{ color: var(--text-faint); }
   table.matrix td.total, table.matrix th.total{ font-weight:700; color: var(--amber); background: rgba(240,166,59,0.06); }
 
   .insight{
@@ -204,7 +230,7 @@
     border-radius: 7px; padding: 7px 12px; border:1px solid var(--line); background:none; color: var(--text-dim);
   }
   .btn:hover{ color: var(--text); border-color: var(--text-faint); }
-  .btn-primary{ background: var(--amber-dim); border-color: var(--amber-dim); color: #f6c47f; }
+  .btn-primary{ background: var(--amber-dim); border-color: var(--amber-dim); color: var(--amber-fg); }
   .btn-primary:hover{ color: #fff; border-color: var(--amber); }
 
   .table-scroll{ overflow-x:auto; margin-top:14px; border:1px solid var(--line); border-radius:8px; max-height: 560px; overflow-y:auto;}
@@ -301,16 +327,16 @@
   select.status-Not-Contacted{ color: var(--text-faint); }
   select.status-Contacted{ color: var(--blue); }
   select.status-Meeting-Scheduled{ color: var(--amber); }
-  select.status-Quotation-Sent{ color: #c9a4f0; }
+  select.status-Quotation-Sent{ color: var(--purple); }
   select.status-Won{ color: var(--green); }
   select.status-Lost{ color: var(--red); }
   select.status-Not-Relevant{ color: var(--text-faint); }
 
   .tag{ display:inline-block; padding:2px 7px; border-radius:20px; font-size:10.5px; font-family: var(--font-mono); white-space:nowrap; }
-  .tag-dobot{ background: var(--amber-dim); color: #f6c47f; }
-  .tag-rexroth{ background: var(--blue-dim); color: #a9cdf0; }
-  .tag-both{ background: linear-gradient(90deg, var(--amber-dim), var(--blue-dim)); color: #f0e0c0; }
-  .tag-other{ background: #2a313d; color: var(--text-faint); }
+  .tag-dobot{ background: var(--amber-dim); color: var(--amber-fg); }
+  .tag-rexroth{ background: var(--blue-dim); color: var(--blue-fg); }
+  .tag-both{ background: linear-gradient(90deg, var(--amber-dim), var(--blue-dim)); color: var(--amber-fg); }
+  .tag-other{ background: var(--line); color: var(--text-faint); }
 
   .actions-cell{ display:flex; gap:5px; white-space:nowrap; }
   .icon-btn{
@@ -412,10 +438,10 @@
   .role-pill{
     display:inline-block; margin-left:8px; padding:2px 8px; border-radius:20px;
     font-family: var(--font-mono); font-size:9.5px; letter-spacing:.04em; text-transform:uppercase;
-    background: var(--blue-dim); color:#cfe0f5; vertical-align:middle;
+    background: var(--blue-dim); color:var(--blue-fg); vertical-align:middle;
   }
-  .role-pill.role-superadmin{ background: var(--amber-dim); color:#f6c47f; }
-  .role-pill.role-viewer{ background: #2a313d; color: var(--text-faint); }
+  .role-pill.role-superadmin{ background: var(--amber-dim); color:var(--amber-fg); }
+  .role-pill.role-viewer{ background: var(--line); color: var(--text-faint); }
 
   .user-row{ display:grid; grid-template-columns: 1.6fr 1fr 1fr 90px 90px; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line-soft); font-size:12.5px; }
   .user-row.head{ font-family: var(--font-mono); font-size:10px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); }
@@ -451,6 +477,7 @@
 </style>
 </head>
 <body>
+<script>(function(){try{var t=localStorage.getItem('exhibitionDashboardTheme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <div class="offline-banner" id="offlineBanner">
   ⚠ No internet connection — you can keep viewing and editing, but nothing will sync to your team until you're back online.
 </div>
@@ -468,6 +495,11 @@
     </div>
     <div class="header-right">
       SOURCE<br><b>Exhibition_Data.xlsx</b>
+      <div class="matrix-toggle" id="themeToggle" style="margin:8px 0;">
+        <button type="button" data-theme="dark" title="Dark mode">🌙 Dark</button>
+        <button type="button" data-theme="light" title="Light mode">☀ Light</button>
+        <button type="button" data-theme="eye" title="Eye protection — warm, low-glare tones">🌿 Eye Care</button>
+      </div>
       <div class="mgmt-access" id="mgmtAccess">
         <button class="btn btn-primary" id="openMgmtPanelBtn" type="button" style="display:none;">Management Panel</button>
         <button class="btn btn-primary" id="openCustomerMasterBtn" type="button" style="display:none;">🏢 Customer Master</button>
@@ -560,6 +592,7 @@
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
         <span class="result-count" id="resultCount"></span>
+        <button class="btn" id="saveNowBtn" title="Immediately commit whatever field you're currently editing, instead of waiting for it to autosave">💾 Save Now</button>
         <button class="btn" id="copyAllBtn">📋 COPY ALL DRAFTS</button>
         <button class="btn" id="exportBtn">⬇ CSV</button>
         <button class="btn" id="exportXlsxBtn">⬇ EXCEL</button>
@@ -826,7 +859,7 @@ const BOARD_COLLECTION = 'exhibitionDashboards';
 const BOARD_DOC = 'sharedLeadBoard';
 const USERS_COLLECTION = 'users'; // full user records — readable only by superadmin/legacy-manager or your own doc
 const TEAM_DIRECTORY_COLLECTION = 'teamDirectory'; // names-only, readable by any active user (for dropdowns)
-const AUTOSAVE_INTERVAL_MS = 10000; // heartbeat autosave while actively typing
+const AUTOSAVE_INTERVAL_MS = 15000; // heartbeat autosave while actively typing
 
 // ============ Access control ============
 // This email always has full superadmin rights (manage users, management panel,
@@ -1376,29 +1409,47 @@ $('#noteTextInput').addEventListener('keydown', (e) => {
   if(e.key === 'Enter'){ e.preventDefault(); $('#addNoteBtn').click(); }
 });
 
-// Autosave heartbeat: while a cell is actively focused (not yet blurred),
-// push its current value every 10s so nothing is lost mid-edit.
-setInterval(() => {
+// Flushes whichever table cell is currently focused-but-not-yet-blurred, so its
+// in-progress value gets committed without waiting for the user to click away.
+// Shared by the periodic autosave heartbeat below and the manual "Save Now" button.
+function flushActiveTableEdit(forceLeadValue){
   const active = document.activeElement;
-  if(active && active.matches && active.matches('#leadsBody [data-field]')){
-    const tr = active.closest('tr');
-    if(!tr) return;
-    const srno = tr.dataset.sr, field = active.dataset.field;
-    const wl = workingLeads.find(x => String(x['Sr.no']) === srno);
-    if(!wl) return;
-    if(field === 'Lead Value'){
-      // Deliberately NOT autosaved while typing: unlike text fields, a partial
-      // number typed so far (e.g. "12" on the way to "1,25,000") is itself a
-      // valid-looking number, not obviously incomplete — auto-committing it would
-      // sync a wildly wrong figure into every teammate's KPI totals and any
-      // export run during that window. Only commit Lead Value on blur, once the
-      // user is actually done editing it.
-      return;
-    } else if(String(wl[field] ?? '') !== active.value){
-      setField(srno, field, active.value);
-    }
+  if(!(active && active.matches && active.matches('#leadsBody [data-field]'))) return false;
+  const tr = active.closest('tr');
+  if(!tr) return false;
+  const srno = tr.dataset.sr, field = active.dataset.field;
+  const wl = workingLeads.find(x => String(x['Sr.no']) === srno);
+  if(!wl) return false;
+  if(field === 'Lead Value' && !forceLeadValue){
+    // Deliberately NOT autosaved on the ambient timer while typing: unlike text
+    // fields, a partial number typed so far (e.g. "12" on the way to "1,25,000")
+    // is itself a valid-looking number, not obviously incomplete — auto-committing
+    // it would sync a wildly wrong figure into every teammate's KPI totals and any
+    // export run during that window. An explicit "Save Now" click is a deliberate
+    // "I'm done" signal though, so that path does commit it (forceLeadValue=true).
+    return false;
   }
-}, AUTOSAVE_INTERVAL_MS);
+  if(String(wl[field] ?? '') !== active.value){ setField(srno, field, active.value); return true; }
+  return false;
+}
+// Autosave heartbeat: while a cell is actively focused (not yet blurred),
+// push its current value every 15s so nothing is lost mid-edit.
+setInterval(() => flushActiveTableEdit(false), AUTOSAVE_INTERVAL_MS);
+
+// Manual "Save Now" — an explicit save action alongside the automatic ones above:
+// commits whatever table cell is currently focused (Lead Value included, since a
+// deliberate click here is an unambiguous "I'm done" signal), and if the Add Lead
+// modal happens to be open, saves its draft immediately too.
+$('#saveNowBtn').addEventListener('click', () => {
+  const btn = $('#saveNowBtn');
+  const flushedTable = flushActiveTableEdit(true);
+  let flushedDraft = false;
+  if($('#addModal').classList.contains('open')){ saveAddLeadDraft(); flushedDraft = true; }
+  const orig = btn.textContent;
+  btn.textContent = (flushedTable || flushedDraft) ? '✓ Saved' : '✓ Nothing pending';
+  btn.classList.add('toast-copied');
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove('toast-copied'); }, 1200);
+});
 
 function renderPreservingFocus(){
   renderKPIs(); renderCharts(); renderMatrix(); renderInsight(); refreshFilterOptions();
@@ -2268,6 +2319,48 @@ function suggestNextEnquiryNumber(){
   });
   return `${prefix}${String(maxN + 1).padStart(6, '0')}`;
 }
+// ---- Add Lead draft autosave: protects against losing everything typed if the
+// modal is closed by accident, the tab is closed, or the browser crashes mid-entry.
+// Saves locally (not to Firestore — it isn't a real lead yet) every 15s while the
+// modal is open, on top of the explicit SAVE LEAD button. ----
+const ADD_LEAD_DRAFT_KEY = 'exhibitionDashboardAddLeadDraft';
+const ADD_LEAD_DRAFT_INTERVAL_MS = 15000;
+let addLeadDraftTimer = null;
+function saveAddLeadDraft(){
+  const draft = {};
+  ADD_FIELDS.forEach(f => { const el = $('#add-' + slug(f.key)); if(el) draft[f.key] = el.value; });
+  const hasContent = Object.values(draft).some(v => v && v.trim());
+  try{
+    if(hasContent) localStorage.setItem(ADD_LEAD_DRAFT_KEY, JSON.stringify({ draft, at: Date.now() }));
+    else localStorage.removeItem(ADD_LEAD_DRAFT_KEY);
+  }catch(err){ /* private browsing / storage full — draft protection just isn't available */ }
+}
+function clearAddLeadDraft(){ try{ localStorage.removeItem(ADD_LEAD_DRAFT_KEY); }catch(err){} }
+function startAddLeadDraftTimer(){
+  stopAddLeadDraftTimer();
+  addLeadDraftTimer = setInterval(saveAddLeadDraft, ADD_LEAD_DRAFT_INTERVAL_MS);
+}
+function stopAddLeadDraftTimer(){ if(addLeadDraftTimer){ clearInterval(addLeadDraftTimer); addLeadDraftTimer = null; } }
+function offerAddLeadDraftRestore(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(ADD_LEAD_DRAFT_KEY) || 'null'); }catch(err){}
+  if(!saved || !saved.draft) return;
+  const minsAgo = Math.round((Date.now() - (saved.at || 0)) / 60000);
+  const whenLabel = minsAgo < 1 ? 'moments ago' : `${minsAgo} minute${minsAgo === 1 ? '' : 's'} ago`;
+  if(!confirm(`You have an unsaved lead draft from ${whenLabel} (probably from a modal that got closed before saving). Restore it?`)){
+    clearAddLeadDraft();
+    return;
+  }
+  Object.entries(saved.draft).forEach(([key, val]) => {
+    const el = $('#add-' + slug(key));
+    if(el && val) el.value = val;
+  });
+  // Re-check the Company Name against Customer Master now that it's been restored,
+  // so the match status / contact chips reflect the restored value.
+  const nameInput = $('#add-Company-Name');
+  if(nameInput) nameInput.dispatchEvent(new Event('change'));
+}
+
 $('#addLeadBtn').addEventListener('click', () => {
   buildAddForm();
   const receivedInput = $('#add-Received-Date');
@@ -2279,9 +2372,11 @@ $('#addLeadBtn').addEventListener('click', () => {
   const genByInput = $('#add-Lead-Generated-By');
   if(genByInput && TEAM_MEMBERS.includes(currentUser)) genByInput.value = currentUser;
   $('#addModal').classList.add('open');
+  offerAddLeadDraftRestore();
+  startAddLeadDraftTimer();
 });
-$('#cancelAddBtn').addEventListener('click', () => $('#addModal').classList.remove('open'));
-$('#addModal').addEventListener('click', (e) => { if(e.target.id === 'addModal') $('#addModal').classList.remove('open'); });
+$('#cancelAddBtn').addEventListener('click', () => { $('#addModal').classList.remove('open'); stopAddLeadDraftTimer(); });
+$('#addModal').addEventListener('click', (e) => { if(e.target.id === 'addModal'){ $('#addModal').classList.remove('open'); stopAddLeadDraftTimer(); } });
 
 $('#saveAddBtn').addEventListener('click', () => {
   const rec = {};
@@ -2315,6 +2410,8 @@ $('#saveAddBtn').addEventListener('click', () => {
     }).catch(err => console.error('Could not link lead to Customer Master:', err));
   }
   $('#addModal').classList.remove('open');
+  stopAddLeadDraftTimer();
+  clearAddLeadDraft();
   renderAll();
   $('#searchBox').value = ''; $('#stateFilter').value=''; $('#cityFilter').value='';
   $('#appFilter').value=''; $('#productFilter').value=''; $('#statusFilter').value='';
@@ -2888,6 +2985,22 @@ $('#signOutBtn').addEventListener('click', async () => {
   if(!fb || !fb.auth) return;
   try{ await fb.signOut(fb.auth); }catch(err){ console.error('Sign-out failed:', err); }
 });
+
+// ============ Theme: Dark / Light / Eye Protection — a personal display preference,
+// not gated by sign-in or role, persisted per-browser via localStorage. The actual
+// attribute is also set by a tiny inline script right after <body> opens (before this
+// script runs) so a returning visitor's saved theme applies immediately, with no
+// flash of the wrong theme while the page loads. ============
+const THEME_STORAGE_KEY = 'exhibitionDashboardTheme';
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  try{ localStorage.setItem(THEME_STORAGE_KEY, theme); }catch(err){ /* private browsing etc — theme just won't persist */ }
+  document.querySelectorAll('#themeToggle button').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
+}
+document.querySelectorAll('#themeToggle button').forEach(btn => {
+  btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+});
+applyTheme(document.documentElement.getAttribute('data-theme') || 'dark'); // sync the toggle's active state on load
 
 // ============ Management Panel ============
 $('#openMgmtPanelBtn').addEventListener('click', () => {
