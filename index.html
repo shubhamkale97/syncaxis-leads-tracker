@@ -830,39 +830,6 @@ const SUPERADMIN_EMAIL = 'shubham.kale@syncaxis.com';
 const LEGACY_MANAGER_EMAIL = 'ddbisure@syncaxis.co.in';
 const ROLE_LABELS = { superadmin:'SUPERADMIN', management:'MANAGEMENT', sales:'SALES', viewer:'VIEWER' };
 
-// ---- Google Maps (optional — Customer Master location picker) ----
-// To enable the interactive "click/drag a pin" map on a customer's location:
-//   1. console.cloud.google.com → create or pick a project → enable "Maps JavaScript
-//      API" and "Places API".
-//   2. Credentials → Create API key → restrict it (HTTP referrers) to your GitHub
-//      Pages domain, e.g. https://shubhamkale97.github.io/*
-//      (Maps JS keys are DESIGNED to be used client-side like this — restricting by
-//      referrer is the real protection, not secrecy. Unlike a GST API key, this one
-//      is safe to leave directly in this public file.)
-//      Google requires a billing account on the project to issue a key at all, but
-//      normal usage here stays well within the free monthly credit.
-//   3. Paste the key below.
-// Leave blank and the location fields still work — you can type exact latitude/
-// longitude by hand (e.g. copied from the Google Maps app); only the interactive
-// picker itself is skipped.
-const GOOGLE_MAPS_API_KEY = '';
-
-// ---- GST verification (optional — Customer Master auto-fetch) ----
-// Not wired to a live provider yet — GSTIN/legal name/registration date/status are
-// plain manual-entry fields in Customer Master today, plus a "look up on the GST
-// portal" shortcut button. To wire in real auto-fetch:
-//   1. Sign up with a GST verification API provider (e.g. Surepass, Masters India,
-//      AppyFlow — compare their current free-tier terms before committing).
-//   2. IMPORTANT: unlike the Maps key above, a GST API key is a real secret (it's
-//      billed per lookup and tied to your account) — pasting it into this public
-//      HTML file would expose it to anyone who views source. It needs a small
-//      serverless proxy (e.g. one Firebase Cloud Function) that holds the key and
-//      that this file calls instead, so the key itself never reaches the browser.
-//   3. Point fetchGstDetails() below at that proxy endpoint.
-async function fetchGstDetails(gstin){
-  throw new Error('GST auto-fetch isn\'t configured yet — enter details manually below, or see the GST verification comment near the top of the file to wire up a provider.');
-}
-
 // ============ Helpers ============
 const $ = sel => document.querySelector(sel);
 const fmtPct = (n, d) => d ? Math.round((n/d)*100) + '%' : '0%';
@@ -3216,14 +3183,12 @@ function companyEditFormHtml(custId){
     </div>
 
     <div class="mgmt-section-title" style="font-size:13px; margin:16px 0 8px;">GST Details</div>
-    <div id="custEditGstError" class="section-note" style="display:none; color:var(--red); margin-bottom:8px;"></div>
     <div class="form-grid">
       <div class="form-field">
         <label>GSTIN</label>
         <div style="display:flex; gap:6px;">
           <input type="text" id="custEdit-gstin" value="${escapeHtml(gst.gstin||'')}" placeholder="22AAAAA0000A1Z5" style="flex:1;">
-          <button type="button" class="btn btn-small" id="custEditGstFetchBtn" title="Try auto-fetch (needs a provider wired up)">⚡ Fetch</button>
-          <button type="button" class="btn btn-small" id="custEditGstPortalBtn" title="Open the official GST portal search">🔍 Portal</button>
+          <button type="button" class="btn btn-small" id="custEditGstPortalBtn" title="Open the official GST portal search">🔍 Look up on GST Portal</button>
         </div>
       </div>
       <div class="form-field"><label>GST Status</label><input type="text" id="custEdit-gstStatus" list="gstStatusOptions" value="${escapeHtml(gst.status||'')}" placeholder="e.g. Active"></div>
@@ -3236,12 +3201,7 @@ function companyEditFormHtml(custId){
     <div class="form-grid">
       <div class="form-field"><label>Latitude</label><input type="number" step="any" id="custEdit-lat" value="${loc.lat != null ? loc.lat : ''}" placeholder="e.g. 18.5204"></div>
       <div class="form-field"><label>Longitude</label><input type="number" step="any" id="custEdit-lng" value="${loc.lng != null ? loc.lng : ''}" placeholder="e.g. 73.8567"></div>
-      <div class="form-field full" id="custEditMapWrap">
-        ${GOOGLE_MAPS_API_KEY ? `
-          <input type="text" id="custEditMapSearch" placeholder="Search an address to drop the pin…" style="margin-bottom:8px;">
-          <div id="custEditMapCanvas" style="height:220px; border-radius:8px; overflow:hidden; background:var(--panel-2);"></div>
-        ` : `<div class="section-note">Add a Google Maps API key (see comment near the top of the file) for the interactive click/drag pin picker — coordinates above can still be typed by hand in the meantime, e.g. copied from the Google Maps app.</div>`}
-      </div>
+      <div class="form-field full"><div class="section-note">Tip: open the location in the Google Maps app, long-press (or right-click on desktop) the exact spot, and it shows the coordinates to copy here.</div></div>
     </div>
 
     <div style="display:flex; gap:8px; margin-top:14px;">
@@ -3250,56 +3210,6 @@ function companyEditFormHtml(custId){
     </div>`;
 }
 
-// ---- Google Maps loader (lazy — only fetched the first time a map is actually shown) ----
-let googleMapsLoadPromise = null;
-function loadGoogleMaps(){
-  if(!GOOGLE_MAPS_API_KEY) return Promise.reject(new Error('No Google Maps API key configured'));
-  if(googleMapsLoadPromise) return googleMapsLoadPromise;
-  googleMapsLoadPromise = new Promise((resolve, reject) => {
-    if(window.google && window.google.maps){ resolve(window.google.maps); return; }
-    const cbName = '__gmapsReady' + Date.now();
-    window[cbName] = () => { resolve(window.google.maps); delete window[cbName]; };
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=places&callback=${cbName}`;
-    script.async = true;
-    script.onerror = () => reject(new Error('Failed to load Google Maps — check the API key and its referrer restriction.'));
-    document.head.appendChild(script);
-  });
-  return googleMapsLoadPromise;
-}
-// Wires the interactive pin picker into whichever company edit form is currently
-// showing (if any) — a no-op if the map canvas isn't in the DOM (view-only mode,
-// no key configured, or no form open right now).
-async function initCustomerMapPicker(){
-  const canvas = document.getElementById('custEditMapCanvas');
-  if(!canvas) return;
-  const latEl = document.getElementById('custEdit-lat'), lngEl = document.getElementById('custEdit-lng');
-  try{
-    const maps = await loadGoogleMaps();
-    const startLat = parseFloat(latEl.value) || 20.5937;   // India's rough geographic center as a sane default
-    const startLng = parseFloat(lngEl.value) || 78.9629;
-    const hasPin = latEl.value !== '' && lngEl.value !== '';
-    const map = new maps.Map(canvas, { center: { lat: startLat, lng: startLng }, zoom: hasPin ? 15 : 4 });
-    const marker = new maps.Marker({ position: { lat: startLat, lng: startLng }, map, draggable: true });
-    const updateFields = pos => { latEl.value = pos.lat().toFixed(6); lngEl.value = pos.lng().toFixed(6); };
-    marker.addListener('dragend', () => updateFields(marker.getPosition()));
-    map.addListener('click', e => { marker.setPosition(e.latLng); updateFields(e.latLng); });
-    const searchInput = document.getElementById('custEditMapSearch');
-    if(searchInput && maps.places){
-      const autocomplete = new maps.places.Autocomplete(searchInput);
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace();
-        if(!place.geometry || !place.geometry.location) return;
-        map.setCenter(place.geometry.location);
-        map.setZoom(15);
-        marker.setPosition(place.geometry.location);
-        updateFields(place.geometry.location);
-      });
-    }
-  }catch(err){
-    canvas.outerHTML = `<div class="section-note">Couldn't load the map: ${escapeHtml(err.message)}</div>`;
-  }
-}
 function contactEditFormHtml(custId, contactId){
   const c = contactId === 'NEW' ? { department:'', contactPerson:'', designation:'', email:'', phone:'', notes:'' } : customerMaster[custId].contacts[contactId];
   return `
@@ -3425,27 +3335,6 @@ function renderCustomerMasterPanel(){
     renderCustomerMasterPanel();
   }));
 
-  const gstFetchBtn = $('#custEditGstFetchBtn');
-  if(gstFetchBtn){
-    gstFetchBtn.addEventListener('click', async () => {
-      const gstin = $('#custEdit-gstin').value.trim();
-      const errBox = $('#custEditGstError');
-      errBox.style.display = 'none';
-      if(!gstin){ errBox.textContent = 'Enter a GSTIN first.'; errBox.style.display = 'block'; return; }
-      const orig = gstFetchBtn.textContent;
-      gstFetchBtn.textContent = '…'; gstFetchBtn.disabled = true;
-      try{
-        const details = await fetchGstDetails(gstin);
-        if(details.legalName) $('#custEdit-gstLegalName').value = details.legalName;
-        if(details.registrationDate) $('#custEdit-gstRegDate').value = details.registrationDate;
-        if(details.status) $('#custEdit-gstStatus').value = details.status;
-      }catch(err){
-        errBox.textContent = err.message;
-        errBox.style.display = 'block';
-      }
-      gstFetchBtn.textContent = orig; gstFetchBtn.disabled = false;
-    });
-  }
   const gstPortalBtn = $('#custEditGstPortalBtn');
   if(gstPortalBtn) gstPortalBtn.addEventListener('click', () => window.open('https://services.gst.gov.in/services/searchtp', '_blank', 'noopener'));
 
@@ -3513,8 +3402,6 @@ function renderCustomerMasterPanel(){
   }
   const contactCancelBtn = $('#contactEditCancelBtn');
   if(contactCancelBtn) contactCancelBtn.addEventListener('click', () => { editingContact = null; renderCustomerMasterPanel(); });
-
-  initCustomerMapPicker();
 }
 $('#openCustomerMasterBtn').addEventListener('click', () => {
   if(!canWrite()){ blockedWriteNotice(); return; }
