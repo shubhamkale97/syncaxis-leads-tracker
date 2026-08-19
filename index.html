@@ -1395,6 +1395,9 @@ async function writeToFirestore(patch){
 async function commitField(srno, field, value){
   if(!canWrite()){ blockedWriteNotice(); return; }
   const key = String(srno);
+  const before = workingLeads.find(r => String(r['Sr.no']) === key);
+  const oldValue = before ? before[field] : undefined;
+  const companyLabel = (before && before['Company Name']) || `Lead #${key}`;
   if(!edits[key]) edits[key] = {};
   edits[key][field] = value;
   editMeta[key] = { by: currentUser || 'Teammate', at: Date.now() };
@@ -1409,6 +1412,11 @@ async function commitField(srno, field, value){
     setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
   } else {
     setSaveState('offline', 'Saved locally — Firebase not configured');
+  }
+  // Skip logging a no-op commit (e.g. focusing then blurring a field untouched) --
+  // only an actual change is worth an entry.
+  if(String(oldValue ?? '') !== String(value ?? '')){
+    logActivity('edit-lead', `${field} on ${companyLabel}: "${truncateForLog(oldValue, 40)}" → "${truncateForLog(value, 40)}"`, { srno: key, field });
   }
 }
 
@@ -1427,6 +1435,7 @@ async function commitNewLead(rec){
   } else {
     setSaveState('offline', 'Saved locally — Firebase not configured');
   }
+  logActivity('add-lead', rec['Company Name'] || rec['Enquiry Number'] || `Lead #${key}`, { srno: key });
 }
 
 async function commitDeleteLead(srno){
@@ -3480,6 +3489,11 @@ async function renderSuperAdminPanel(){
     </div>
   `;
 
+  // Resolves a user's display name for a log label -- these handlers only have a
+  // uid to work with, `users` (the array this whole panel was rendered from) is
+  // still in scope via closure.
+  const targetLabel = uid => { const u = users.find(x => x.uid === uid); return (u && (u.displayName || u.email)) || uid; };
+
   content.querySelectorAll('.role-select').forEach(sel => {
     sel.addEventListener('change', async () => {
       const uid = sel.dataset.uid;
@@ -3487,6 +3501,7 @@ async function renderSuperAdminPanel(){
       if(scopeSel) scopeSel.disabled = sel.value !== 'sales';
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { role: sel.value }, { merge: true });
+        logActivity('change-role', `${targetLabel(uid)} → ${sel.value}`, { uid });
       }catch(err){ showToast('Could not update role: ' + err.message, 'error'); }
     });
   });
@@ -3495,6 +3510,7 @@ async function renderSuperAdminPanel(){
       const uid = sel.dataset.uid;
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { scope: sel.value }, { merge: true });
+        logActivity('change-scope', `${targetLabel(uid)} → ${sel.value === 'own' ? 'Own Leads Only' : 'All Leads'}`, { uid });
       }catch(err){ showToast('Could not update scope: ' + err.message, 'error'); }
     });
   });
@@ -3504,6 +3520,7 @@ async function renderSuperAdminPanel(){
       const wasDisabled = btn.dataset.disabled === 'true';
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { disabled: !wasDisabled }, { merge: true });
+        logActivity(wasDisabled ? 'enable-user' : 'disable-user', targetLabel(uid), { uid });
         renderSuperAdminPanel();
       }catch(err){ showToast('Could not update status: ' + err.message, 'error'); }
     });
@@ -3531,6 +3548,7 @@ async function renderSuperAdminPanel(){
       cb.disabled = true;
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { canDownload: val }, { merge: true });
+        logActivity('change-permission', `${targetLabel(uid)}: download ${val ? 'granted' : 'revoked'}`, { uid });
       }catch(err){
         showToast('Could not update download permission: ' + err.message, 'error');
         cb.checked = !val;
@@ -3545,6 +3563,7 @@ async function renderSuperAdminPanel(){
       cb.disabled = true;
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { canManageOptions: val }, { merge: true });
+        logActivity('change-permission', `${targetLabel(uid)}: manage options ${val ? 'granted' : 'revoked'}`, { uid });
       }catch(err){
         showToast('Could not update permission: ' + err.message, 'error');
         cb.checked = !val;
@@ -3559,6 +3578,7 @@ async function renderSuperAdminPanel(){
       cb.disabled = true;
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { canDelete: val }, { merge: true });
+        logActivity('change-permission', `${targetLabel(uid)}: delete ${val ? 'granted' : 'revoked'}`, { uid });
       }catch(err){
         showToast('Could not update delete permission: ' + err.message, 'error');
         cb.checked = !val;
@@ -3574,6 +3594,7 @@ async function renderSuperAdminPanel(){
       btn.textContent = 'Saving…'; btn.disabled = true;
       try{
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { viewFilter }, { merge: true });
+        logActivity('change-view-filter', `${targetLabel(uid)}: ${viewFilterSummary(viewFilter)}`, { uid });
         renderSuperAdminPanel();
       }catch(err){
         showToast('Could not save filter: ' + err.message, 'error');
@@ -3719,6 +3740,41 @@ async function logActivity(action, label, extra){
   // Reflect locally right away — same reason every other write in this app does this —
   // rather than waiting on the realtime listener's round-trip to show it in the panel.
   activityLog[id] = Object.assign({}, entry, { at: Date.now() });
+  if(ROUTINE_LOG_ACTIONS.has(action)) pruneRoutineActivityLog();
+}
+// Everything lives in ONE shared Firestore document (1MB hard limit), and lead
+// edits/additions happen far more often than a Customer Master add/delete ever
+// would -- logging every one of them forever would eventually threaten that limit.
+// So 'add-lead'/'edit-lead' entries are treated as a rolling recent-activity window
+// (oldest pruned once there are more than the cap) rather than a permanent archive.
+// This only prunes the LOG ENTRY noting a change happened -- the lead data itself is
+// never touched. Deletions, restores, and admin/permission changes are exempt: they're
+// far rarer, and a deletion specifically needs to stay restorable indefinitely, not
+// get silently pruned out from under someone before they get a chance to restore it.
+const ROUTINE_LOG_CAP = 400;
+const ROUTINE_LOG_ACTIONS = new Set(['add-lead', 'edit-lead']);
+async function pruneRoutineActivityLog(){
+  const routine = Object.entries(activityLog)
+    .filter(([, e]) => ROUTINE_LOG_ACTIONS.has(e.action))
+    .sort((a, b) => (b[1].at || 0) - (a[1].at || 0)); // newest first
+  if(routine.length <= ROUTINE_LOG_CAP) return;
+  const toRemove = routine.slice(ROUTINE_LOG_CAP);
+  const patch = {};
+  toRemove.forEach(([id]) => {
+    if(fb) patch[`activityLog.${id}`] = fb.deleteField();
+    delete activityLog[id];
+  });
+  if(fb && boardRef){
+    try{ await writeToFirestore(patch); }
+    catch(err){ console.error('Could not prune old activity log entries:', err); }
+  }
+}
+// Keeps a log label readable when the value itself could be a long free-text field
+// (Notes, Application Detail, etc.) rather than letting one long entry blow up the panel.
+function truncateForLog(s, max){
+  s = String(s ?? '').trim();
+  if(!s) return '(blank)';
+  return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
 // Called after a new lead is saved (when "Save to Customer Master" is checked). Finds
@@ -4252,6 +4308,10 @@ function activityActionLabel(action){
     'add-customer': 'Added customer', 'add-contact': 'Added contact',
     'delete-customer': 'Deleted customer', 'delete-contact': 'Deleted contact',
     'restore-customer': 'Restored customer', 'restore-contact': 'Restored contact',
+    'add-lead': 'Added lead', 'edit-lead': 'Edited lead',
+    'add-user': 'Added user', 'change-role': 'Changed role', 'change-scope': 'Changed scope',
+    'enable-user': 'Enabled user', 'disable-user': 'Disabled user',
+    'change-permission': 'Changed permission', 'change-view-filter': 'Changed region/view restriction',
   }[action] || action;
 }
 function renderActivityLogPanel(){
@@ -4260,7 +4320,7 @@ function renderActivityLogPanel(){
   if(!isSuperAdmin()){ content.innerHTML = `<div class="section-note">Super Admin only.</div>`; return; }
   const entries = Object.entries(activityLog).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
   const cols = 'grid-template-columns: 150px 1fr 120px 100px;';
-  let html = `<div class="section-note" style="margin-bottom:14px;">Every add or delete of a customer or contact, who did it, and when. A deletion can be restored here from exactly the data it had right before it was removed — nothing is truly gone until you're sure.</div>`;
+  let html = `<div class="section-note" style="margin-bottom:14px;">Leads added or edited, Customer Master adds/deletes, and Super Admin user/permission changes — who did it, and when. A deletion can be restored here from exactly the data it had right before it was removed. Routine lead activity (added/edited) is kept as a recent-activity window of the last ${ROUTINE_LOG_CAP} entries rather than forever, to keep the shared data file from growing without bound — deletions, restores, and permission changes are never pruned.</div>`;
   if(!entries.length){
     html += `<div class="section-note">Nothing logged yet.</div>`;
   } else {
@@ -4387,6 +4447,7 @@ async function submitAddUser(){
       disabled: false, createdAt: fb.serverTimestamp(), createdBy: currentUserEmail,
     });
     await fb.setDoc(fb.doc(fb.db, TEAM_DIRECTORY_COLLECTION, newUid), { displayName: name });
+    logActivity('add-user', `${name} (${email}) as ${role}`, { uid: newUid });
     showToast(`${name} was added. They'll get an email at ${email} to set their password before signing in.`, 'success');
     renderSuperAdminPanel();
   }catch(err){
