@@ -654,7 +654,6 @@
       <div style="display:flex; gap:8px; align-items:center;">
         <span class="result-count" id="resultCount"></span>
         <button class="btn" id="saveNowBtn" title="Immediately commit whatever field you're currently editing, instead of waiting for it to autosave">💾 Save Now</button>
-        <button class="btn" id="autofillEnquiryBtn" title="Generate an Enquiry Number for every lead that doesn't have one yet">🔢 Autofill Enquiry Numbers</button>
         <button class="btn" id="copyAllBtn">📋 COPY ALL DRAFTS</button>
         <button class="btn" id="exportBtn">⬇ CSV</button>
         <button class="btn" id="exportXlsxBtn">⬇ EXCEL</button>
@@ -1654,7 +1653,6 @@ $('#saveNowBtn').addEventListener('click', () => {
   btn.classList.add('toast-copied');
   setTimeout(() => { btn.textContent = orig; btn.classList.remove('toast-copied'); }, 1200);
 });
-$('#autofillEnquiryBtn').addEventListener('click', () => autofillMissingEnquiryNumbers());
 
 function renderPreservingFocus(){
   renderKPIs(); renderCharts(); renderMatrix(); renderInsight(); refreshFilterOptions();
@@ -1710,6 +1708,7 @@ function startRealtimeSync(){
     }
     hasSyncedOnce = true;
     setSaveState('live', 'Synced to team');
+    autofillMissingEnquiryNumbers(); // silently backfills any lead missing one -- no button, the system just does it
   }, err => {
     console.error('Realtime sync error:', err);
     setSaveState('offline', 'Sync error — check Firestore rules');
@@ -2535,18 +2534,23 @@ function suggestNextEnquiryNumber(){
   return `${prefix}${String(maxN + 1).padStart(6, '0')}`;
 }
 
-// ---- Autofill Enquiry Numbers: bulk-backfill for leads that already exist without
-// one (migrated from the old sheet, entered in a hurry at the booth, etc.) rather
-// than requiring each one be typed in by hand. Uses each lead's own Received Date to
-// pick the financial year, so an old lead gets a number from the year it actually
-// came in -- not the year someone got around to backfilling it. One combined
-// Firestore write for the whole batch, same batching approach as Customer ID
-// reservation, instead of one round-trip per row. ----
+// ---- Autofill Enquiry Numbers: runs itself automatically (no button, no prompt) --
+// every time fresh data arrives from Firestore (see startRealtimeSync), it silently
+// backfills an Enquiry Number for any lead that doesn't have one yet (migrated from
+// the old sheet, entered in a hurry at the booth, etc.). Uses each lead's own
+// Received Date to pick the financial year, so an old lead gets a number from the
+// year it actually came in -- not the year the system happened to notice it.
+// Restricted to management/superadmin (canManage()) rather than every canWrite()
+// user: a 'sales' account scoped to "own leads only" sees a filtered subset of
+// leads, and backfilling from that partial view risks handing two different leads
+// the same number; management/superadmin always see the full set. Guarded against
+// overlapping runs since another snapshot can arrive before an earlier write lands. ----
+let enquiryAutofillInFlight = false;
 function autofillMissingEnquiryNumbers(){
-  if(!canWrite()){ blockedWriteNotice(); return; }
+  if(enquiryAutofillInFlight || !canManage()) return;
   const missing = workingLeads.filter(r => !String(r['Enquiry Number'] || '').trim());
-  if(!missing.length){ showToast('Every lead already has an Enquiry Number.', 'success'); return; }
-  if(!confirm(`Generate Enquiry Numbers for ${missing.length} lead${missing.length===1?'':'s'} that don't have one yet? Each one stays individually editable afterwards.`)) return;
+  if(!missing.length) return;
+  enquiryAutofillInFlight = true;
 
   // Highest sequence number already used per FY prefix, so generated numbers
   // continue on from real ones instead of colliding with them.
@@ -2578,15 +2582,18 @@ function autofillMissingEnquiryNumbers(){
   });
   computeWorking();
   saveLocalFallback();
-  renderAll();
-  showToast(`Generated Enquiry Numbers for ${missing.length} lead${missing.length===1?'':'s'}.`, 'success');
+  renderPreservingFocus(); // don't yank focus away if this fires while someone's mid-edit elsewhere in the table
+  showToast(`Auto-generated Enquiry Numbers for ${missing.length} lead${missing.length===1?'':'s'} that didn't have one.`, 'success');
+  const release = () => { enquiryAutofillInFlight = false; };
   if(fb && boardRef){
     setSaveState('saving', 'Saving…');
     writeToFirestore(patch).then(ok => {
       setSaveState(ok ? 'live' : 'offline', ok ? 'Synced to team' : 'Sync failed — saved locally, will retry');
+      release();
     });
   } else {
     setSaveState('offline', 'Saved locally — Firebase not configured');
+    release();
   }
 }
 
@@ -3175,7 +3182,6 @@ function updateRoleUI(){
   $('#openCustomerMasterBtn').style.display = canWrite() ? '' : 'none';
   $('#signOutBtn').style.display = '';
   $('#addLeadBtn').style.display = canWrite() ? '' : 'none';
-  $('#autofillEnquiryBtn').style.display = canWrite() ? '' : 'none';
   ['#exportBtn','#exportXlsxBtn','#exportPdfBtn','#mgmtPanelExportBtn'].forEach(sel => {
     const el = $(sel);
     if(el) el.style.display = canDownload() ? '' : 'none';
