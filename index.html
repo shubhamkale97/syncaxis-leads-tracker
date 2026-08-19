@@ -2636,7 +2636,10 @@ async function renderSuperAdminPanel(){
             <option value="own" ${u.scope==='own'?'selected':''}>Own Leads Only</option>
           </select></div>
           <div style="color:${u.disabled?'var(--red)':'var(--green)'};">${u.disabled?'Disabled':'Active'}</div>
-          <div><button class="btn toggle-disable-btn" data-uid="${u.uid}" data-disabled="${!!u.disabled}">${u.disabled?'Enable':'Disable'}</button></div>
+          <div style="display:flex; flex-direction:column; gap:5px;">
+            <button class="btn toggle-disable-btn" data-uid="${u.uid}" data-disabled="${!!u.disabled}">${u.disabled?'Enable':'Disable'}</button>
+            <button class="btn reset-pw-btn" data-uid="${u.uid}" data-email="${escapeHtml(u.email||'')}" title="Emails them a link to set a new password — you never see or type it">Reset Password</button>
+          </div>
         </div>
         ${u.role === 'viewer' ? `
         <details style="margin:-2px 0 10px;">
@@ -2676,6 +2679,22 @@ async function renderSuperAdminPanel(){
         await fb.setDoc(fb.doc(fb.db, USERS_COLLECTION, uid), { disabled: !wasDisabled }, { merge: true });
         renderSuperAdminPanel();
       }catch(err){ alert('Could not update status: ' + err.message); }
+    });
+  });
+  content.querySelectorAll('.reset-pw-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const email = btn.dataset.email;
+      if(!email) return;
+      const orig = btn.textContent;
+      btn.textContent = 'Sending…'; btn.disabled = true;
+      try{
+        await fb.sendPasswordResetEmail(fb.auth, email);
+        btn.textContent = '✓ Email sent';
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
+      }catch(err){
+        alert('Could not send reset email: ' + err.message);
+        btn.textContent = orig; btn.disabled = false;
+      }
     });
   });
   content.querySelectorAll('.save-filter-btn').forEach(btn => {
