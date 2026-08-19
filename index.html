@@ -830,6 +830,39 @@ const SUPERADMIN_EMAIL = 'shubham.kale@syncaxis.com';
 const LEGACY_MANAGER_EMAIL = 'ddbisure@syncaxis.co.in';
 const ROLE_LABELS = { superadmin:'SUPERADMIN', management:'MANAGEMENT', sales:'SALES', viewer:'VIEWER' };
 
+// ---- Google Maps (optional — Customer Master location picker) ----
+// To enable the interactive "click/drag a pin" map on a customer's location:
+//   1. console.cloud.google.com → create or pick a project → enable "Maps JavaScript
+//      API" and "Places API".
+//   2. Credentials → Create API key → restrict it (HTTP referrers) to your GitHub
+//      Pages domain, e.g. https://shubhamkale97.github.io/*
+//      (Maps JS keys are DESIGNED to be used client-side like this — restricting by
+//      referrer is the real protection, not secrecy. Unlike a GST API key, this one
+//      is safe to leave directly in this public file.)
+//      Google requires a billing account on the project to issue a key at all, but
+//      normal usage here stays well within the free monthly credit.
+//   3. Paste the key below.
+// Leave blank and the location fields still work — you can type exact latitude/
+// longitude by hand (e.g. copied from the Google Maps app); only the interactive
+// picker itself is skipped.
+const GOOGLE_MAPS_API_KEY = '';
+
+// ---- GST verification (optional — Customer Master auto-fetch) ----
+// Not wired to a live provider yet — GSTIN/legal name/registration date/status are
+// plain manual-entry fields in Customer Master today, plus a "look up on the GST
+// portal" shortcut button. To wire in real auto-fetch:
+//   1. Sign up with a GST verification API provider (e.g. Surepass, Masters India,
+//      AppyFlow — compare their current free-tier terms before committing).
+//   2. IMPORTANT: unlike the Maps key above, a GST API key is a real secret (it's
+//      billed per lookup and tied to your account) — pasting it into this public
+//      HTML file would expose it to anyone who views source. It needs a small
+//      serverless proxy (e.g. one Firebase Cloud Function) that holds the key and
+//      that this file calls instead, so the key itself never reaches the browser.
+//   3. Point fetchGstDetails() below at that proxy endpoint.
+async function fetchGstDetails(gstin){
+  throw new Error('GST auto-fetch isn\'t configured yet — enter details manually below, or see the GST verification comment near the top of the file to wire up a provider.');
+}
+
 // ============ Helpers ============
 const $ = sel => document.querySelector(sel);
 const fmtPct = (n, d) => d ? Math.round((n/d)*100) + '%' : '0%';
@@ -3164,8 +3197,14 @@ let editingCustomerId = null;   // 'NEW' while adding a brand-new company, or a 
 let editingContact = null;      // { custId, contactId } — contactId 'NEW' while adding a fresh contact
 let customerMasterSearch = '';
 
+// GST statuses seen in the wild — offered as suggestions, not a locked list, since a
+// real API's returned status string might not match exactly.
+const GST_STATUS_SUGGESTIONS = ['Active', 'Cancelled', 'Suspended', 'Provisional', 'Inactive'];
+
 function companyEditFormHtml(custId){
-  const c = custId === 'NEW' ? { companyName:'', country:'', state:'', city:'', address:'' } : customerMaster[custId];
+  const c = custId === 'NEW' ? { companyName:'', country:'', state:'', city:'', address:'', gst:{}, location:{} } : customerMaster[custId];
+  const gst = c.gst || {};
+  const loc = c.location || {};
   const sel = (opts, val) => `<option value="" ${!val?'selected':''}>—</option>` + opts.map(o=>`<option value="${escapeHtml(o)}" ${o===val?'selected':''}>${escapeHtml(o)}</option>`).join('');
   return `
     <div class="form-grid" style="margin-top:8px;">
@@ -3175,10 +3214,91 @@ function companyEditFormHtml(custId){
       <div class="form-field"><label>City</label><select id="custEdit-city">${sel(CITY_OPTIONS, c.city)}</select></div>
       <div class="form-field full"><label>Address</label><input type="text" id="custEdit-address" value="${escapeHtml(c.address||'')}"></div>
     </div>
-    <div style="display:flex; gap:8px; margin-top:10px;">
+
+    <div class="mgmt-section-title" style="font-size:13px; margin:16px 0 8px;">GST Details</div>
+    <div id="custEditGstError" class="section-note" style="display:none; color:var(--red); margin-bottom:8px;"></div>
+    <div class="form-grid">
+      <div class="form-field">
+        <label>GSTIN</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="custEdit-gstin" value="${escapeHtml(gst.gstin||'')}" placeholder="22AAAAA0000A1Z5" style="flex:1;">
+          <button type="button" class="btn btn-small" id="custEditGstFetchBtn" title="Try auto-fetch (needs a provider wired up)">⚡ Fetch</button>
+          <button type="button" class="btn btn-small" id="custEditGstPortalBtn" title="Open the official GST portal search">🔍 Portal</button>
+        </div>
+      </div>
+      <div class="form-field"><label>GST Status</label><input type="text" id="custEdit-gstStatus" list="gstStatusOptions" value="${escapeHtml(gst.status||'')}" placeholder="e.g. Active"></div>
+      <div class="form-field full"><label>Legal / Registered Name</label><input type="text" id="custEdit-gstLegalName" value="${escapeHtml(gst.legalName||'')}"></div>
+      <div class="form-field"><label>GST Registration Date</label><input type="date" id="custEdit-gstRegDate" value="${escapeHtml(gst.registrationDate||'')}"></div>
+    </div>
+    <datalist id="gstStatusOptions">${GST_STATUS_SUGGESTIONS.map(s=>`<option value="${s}">`).join('')}</datalist>
+
+    <div class="mgmt-section-title" style="font-size:13px; margin:16px 0 8px;">Location</div>
+    <div class="form-grid">
+      <div class="form-field"><label>Latitude</label><input type="number" step="any" id="custEdit-lat" value="${loc.lat != null ? loc.lat : ''}" placeholder="e.g. 18.5204"></div>
+      <div class="form-field"><label>Longitude</label><input type="number" step="any" id="custEdit-lng" value="${loc.lng != null ? loc.lng : ''}" placeholder="e.g. 73.8567"></div>
+      <div class="form-field full" id="custEditMapWrap">
+        ${GOOGLE_MAPS_API_KEY ? `
+          <input type="text" id="custEditMapSearch" placeholder="Search an address to drop the pin…" style="margin-bottom:8px;">
+          <div id="custEditMapCanvas" style="height:220px; border-radius:8px; overflow:hidden; background:var(--panel-2);"></div>
+        ` : `<div class="section-note">Add a Google Maps API key (see comment near the top of the file) for the interactive click/drag pin picker — coordinates above can still be typed by hand in the meantime, e.g. copied from the Google Maps app.</div>`}
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:14px;">
       <button class="btn btn-primary btn-small" id="custEditSaveBtn">SAVE</button>
       <button class="btn btn-small" id="custEditCancelBtn">CANCEL</button>
     </div>`;
+}
+
+// ---- Google Maps loader (lazy — only fetched the first time a map is actually shown) ----
+let googleMapsLoadPromise = null;
+function loadGoogleMaps(){
+  if(!GOOGLE_MAPS_API_KEY) return Promise.reject(new Error('No Google Maps API key configured'));
+  if(googleMapsLoadPromise) return googleMapsLoadPromise;
+  googleMapsLoadPromise = new Promise((resolve, reject) => {
+    if(window.google && window.google.maps){ resolve(window.google.maps); return; }
+    const cbName = '__gmapsReady' + Date.now();
+    window[cbName] = () => { resolve(window.google.maps); delete window[cbName]; };
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=places&callback=${cbName}`;
+    script.async = true;
+    script.onerror = () => reject(new Error('Failed to load Google Maps — check the API key and its referrer restriction.'));
+    document.head.appendChild(script);
+  });
+  return googleMapsLoadPromise;
+}
+// Wires the interactive pin picker into whichever company edit form is currently
+// showing (if any) — a no-op if the map canvas isn't in the DOM (view-only mode,
+// no key configured, or no form open right now).
+async function initCustomerMapPicker(){
+  const canvas = document.getElementById('custEditMapCanvas');
+  if(!canvas) return;
+  const latEl = document.getElementById('custEdit-lat'), lngEl = document.getElementById('custEdit-lng');
+  try{
+    const maps = await loadGoogleMaps();
+    const startLat = parseFloat(latEl.value) || 20.5937;   // India's rough geographic center as a sane default
+    const startLng = parseFloat(lngEl.value) || 78.9629;
+    const hasPin = latEl.value !== '' && lngEl.value !== '';
+    const map = new maps.Map(canvas, { center: { lat: startLat, lng: startLng }, zoom: hasPin ? 15 : 4 });
+    const marker = new maps.Marker({ position: { lat: startLat, lng: startLng }, map, draggable: true });
+    const updateFields = pos => { latEl.value = pos.lat().toFixed(6); lngEl.value = pos.lng().toFixed(6); };
+    marker.addListener('dragend', () => updateFields(marker.getPosition()));
+    map.addListener('click', e => { marker.setPosition(e.latLng); updateFields(e.latLng); });
+    const searchInput = document.getElementById('custEditMapSearch');
+    if(searchInput && maps.places){
+      const autocomplete = new maps.places.Autocomplete(searchInput);
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if(!place.geometry || !place.geometry.location) return;
+        map.setCenter(place.geometry.location);
+        map.setZoom(15);
+        marker.setPosition(place.geometry.location);
+        updateFields(place.geometry.location);
+      });
+    }
+  }catch(err){
+    canvas.outerHTML = `<div class="section-note">Couldn't load the map: ${escapeHtml(err.message)}</div>`;
+  }
 }
 function contactEditFormHtml(custId, contactId){
   const c = contactId === 'NEW' ? { department:'', contactPerson:'', designation:'', email:'', phone:'', notes:'' } : customerMaster[custId].contacts[contactId];
@@ -3228,11 +3348,15 @@ function renderCustomerMasterPanel(){
       html += `<div class="mgmt-section-title">Edit Company</div>${companyEditFormHtml(cid)}`;
     } else {
       const loc = [c.city, c.state, c.country].filter(Boolean).join(', ');
+      const gst = c.gst || {};
+      const geo = c.location || {};
       html += `
         <div class="customer-card-head">
           <div>
             <div class="customer-name">${escapeHtml(c.companyName)}</div>
             <div class="customer-loc">${escapeHtml(loc)}${c.address ? ' · ' + escapeHtml(c.address) : ''}</div>
+            ${gst.gstin ? `<div class="customer-loc">GSTIN ${escapeHtml(gst.gstin)}${gst.status ? ' · ' + escapeHtml(gst.status) : ''}${gst.legalName ? ' · ' + escapeHtml(gst.legalName) : ''}</div>` : ''}
+            ${geo.lat != null && geo.lng != null ? `<a href="https://www.google.com/maps?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener" class="btn btn-small" style="margin-top:6px; display:inline-block;">📍 View on Map</a>` : ''}
           </div>
           ${readOnly ? '' : `
           <div class="customer-card-actions">
@@ -3301,17 +3425,52 @@ function renderCustomerMasterPanel(){
     renderCustomerMasterPanel();
   }));
 
+  const gstFetchBtn = $('#custEditGstFetchBtn');
+  if(gstFetchBtn){
+    gstFetchBtn.addEventListener('click', async () => {
+      const gstin = $('#custEdit-gstin').value.trim();
+      const errBox = $('#custEditGstError');
+      errBox.style.display = 'none';
+      if(!gstin){ errBox.textContent = 'Enter a GSTIN first.'; errBox.style.display = 'block'; return; }
+      const orig = gstFetchBtn.textContent;
+      gstFetchBtn.textContent = '…'; gstFetchBtn.disabled = true;
+      try{
+        const details = await fetchGstDetails(gstin);
+        if(details.legalName) $('#custEdit-gstLegalName').value = details.legalName;
+        if(details.registrationDate) $('#custEdit-gstRegDate').value = details.registrationDate;
+        if(details.status) $('#custEdit-gstStatus').value = details.status;
+      }catch(err){
+        errBox.textContent = err.message;
+        errBox.style.display = 'block';
+      }
+      gstFetchBtn.textContent = orig; gstFetchBtn.disabled = false;
+    });
+  }
+  const gstPortalBtn = $('#custEditGstPortalBtn');
+  if(gstPortalBtn) gstPortalBtn.addEventListener('click', () => window.open('https://services.gst.gov.in/services/searchtp', '_blank', 'noopener'));
+
   const custSaveBtn = $('#custEditSaveBtn');
   if(custSaveBtn){
     custSaveBtn.addEventListener('click', async () => {
       const companyName = $('#custEdit-companyName').value.trim();
       if(!companyName){ alert('Company Name is required.'); return; }
+      const latVal = $('#custEdit-lat').value.trim(), lngVal = $('#custEdit-lng').value.trim();
       const fields = {
         companyName,
         country: $('#custEdit-country').value,
         state: $('#custEdit-state').value,
         city: $('#custEdit-city').value,
         address: $('#custEdit-address').value.trim(),
+        gst: {
+          gstin: $('#custEdit-gstin').value.trim(),
+          status: $('#custEdit-gstStatus').value.trim(),
+          legalName: $('#custEdit-gstLegalName').value.trim(),
+          registrationDate: $('#custEdit-gstRegDate').value,
+        },
+        location: {
+          lat: latVal === '' ? null : parseFloat(latVal),
+          lng: lngVal === '' ? null : parseFloat(lngVal),
+        },
       };
       if(editingCustomerId === 'NEW'){
         const cid = newCustomerId();
@@ -3354,6 +3513,8 @@ function renderCustomerMasterPanel(){
   }
   const contactCancelBtn = $('#contactEditCancelBtn');
   if(contactCancelBtn) contactCancelBtn.addEventListener('click', () => { editingContact = null; renderCustomerMasterPanel(); });
+
+  initCustomerMapPicker();
 }
 $('#openCustomerMasterBtn').addEventListener('click', () => {
   if(!canWrite()){ blockedWriteNotice(); return; }
