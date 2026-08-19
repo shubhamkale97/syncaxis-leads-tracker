@@ -1838,7 +1838,7 @@ function rowHtml(r){
     <tr class="${isNew ? 'new-row' : ''}" data-sr="${r['Sr.no']}">
       <td data-label="Sr. No.">${srCellHtml(r['Sr.no'])}</td>
       <td data-label="Enquiry No"><div class="enquiry-cell priority-${priorityKey(r['Lead Quality'])}"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
-      <td data-label="Company"><input class="cell-input" data-field="Company Name" value="${(r['Company Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
+      <td data-label="Company" title="Linked to Customer Master — rename it there (Customer Master panel) so every linked lead stays in sync, rather than editing it per-lead here.">${escapeHtml(r['Company Name']) || '—'}</td>
       <td data-label="Customer ID" style="font-family:var(--font-mono); font-size:11px; color:var(--text-faint);" title="Linked Customer Master record — set automatically, not editable here">${escapeHtml(r['Customer ID']) || '—'}</td>
       <td data-label="Department"><input class="cell-input" data-field="Department" value="${(r['Department']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
       <td data-label="Visitor"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
