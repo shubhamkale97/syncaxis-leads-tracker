@@ -144,6 +144,13 @@
   .lead-value-cell .cell-input{ min-width:76px; text-align:right; font-family: var(--font-mono); font-size:11.5px; }
   .enquiry-cell{ display:flex; align-items:center; gap:5px; }
   .priority-badge{ flex:none; font-size:13px; line-height:1; cursor:default; }
+  /* Enquiry Number itself glows to match its priority (not just the badge) — kept
+     subtle (small blur, no change to size/weight of the digits) so the number stays
+     easy to read. Selectors are deliberately specific so this also wins over the
+     mobile "small header" color rule for this cell. */
+  table.leads .enquiry-cell.priority-hot .cell-input{ color:#ff8a5c; text-shadow:0 0 5px rgba(255,120,60,.5); }
+  table.leads .enquiry-cell.priority-warm .cell-input{ color:#ffcf6b; text-shadow:0 0 5px rgba(240,166,59,.4); }
+  table.leads .enquiry-cell.priority-cold .cell-input{ color:#8fd3f4; text-shadow:0 0 5px rgba(120,190,240,.4); }
 
   .section{
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
@@ -779,6 +786,16 @@ const LEAD_QUALITY_OPTIONS = ['🔥 Hot','🌤 Warm','❄️ Cold']; // shown to
 function priorityEmoji(q){
   const m = String(q || '').match(/^\S+/);
   return m ? m[0] : '';
+}
+// Maps a Priority value to a CSS class suffix ('hot'/'warm'/'cold') so the Enquiry
+// Number itself can be styled to match (glowing red for Hot, amber for Warm, icy
+// blue for Cold) -- not just the little badge next to it.
+function priorityKey(q){
+  const s = String(q || '');
+  if(s.includes('Hot')) return 'hot';
+  if(s.includes('Warm')) return 'warm';
+  if(s.includes('Cold')) return 'cold';
+  return '';
 }
 const INQUIRY_SOURCE_OPTIONS = ['Exhibition Booth','Website','Phone Call','Direct Email','Direct Visit','Old Customer','Referral','Other'];
 const LEAD_TYPE_OPTIONS = ['Project','Trading','Other']; // from INQUIRY_REGISTER sheet's "Lead Type" column
@@ -1651,7 +1668,7 @@ function rowHtml(r){
   return `
     <tr class="${isNew ? 'new-row' : ''}" data-sr="${r['Sr.no']}">
       <td data-label="#">${srCellHtml(r['Sr.no'])}</td>
-      <td data-label="Enquiry No"><div class="enquiry-cell"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
+      <td data-label="Enquiry No"><div class="enquiry-cell priority-${priorityKey(r['Lead Quality'])}"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
       <td data-label="Company"><input class="cell-input" data-field="Company Name" value="${(r['Company Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
       <td data-label="Visitor"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
       <td data-label="State">${r.State}</td>
@@ -1758,6 +1775,8 @@ function wireRowEvents(){
             badge.textContent = priorityEmoji(el.value);
             badge.title = el.value ? el.value + ' priority' : 'No priority set';
           }
+          const enquiryCell = tr.querySelector('.enquiry-cell');
+          if(enquiryCell) enquiryCell.className = 'enquiry-cell priority-' + priorityKey(el.value);
         }
         if(el.dataset.field === 'Email ID'){
           const tdActions = tr.querySelector('.actions-cell');
