@@ -1734,6 +1734,7 @@ function startRealtimeSync(){
     if($('#activityLogOverlay') && $('#activityLogOverlay').classList.contains('open')){
       renderActivityLogPanel();
     }
+    refreshViewFilterSelectOptions();
     hasSyncedOnce = true;
     setSaveState('live', 'Synced to team');
     autofillMissingEnquiryNumbers(); // silently backfills any lead missing one -- no button, the system just does it
@@ -3369,6 +3370,29 @@ function readViewFilterBuilder(idPrefix){
 function viewFilterSummary(vf){
   if(!vf || !Object.keys(vf).length) return 'Full access — no restriction';
   return Object.entries(vf).map(([k,v]) => `${k}: ${v.join(' or ')}`).join(' · ');
+}
+// State/City/Application depend on real-time-synced lead data (uniqueSorted()/
+// APP_CATS) rather than a static list, so if the Super Admin panel happens to be
+// opened before that first sync lands -- or a teammate adds a lead with a brand new
+// state/city while the panel is already open -- those boxes render empty and stay
+// that way forever, since nothing was refreshing them. Called on every realtime
+// sync tick; refreshes just the <option> lists of the already-rendered filter
+// selects IN PLACE (both the 'Add New User' builder and every existing user's
+// editor), preserving whatever's already checked, WITHOUT re-rendering the whole
+// panel or re-fetching the users list -- so it can never wipe out an admin's
+// in-progress typing elsewhere in the form.
+function refreshViewFilterSelectOptions(){
+  const overlay = $('#superAdminOverlay');
+  if(!overlay || !overlay.classList.contains('open')) return;
+  VIEW_FILTER_FIELDS.forEach(f => {
+    const suffix = '-' + slug(f.key);
+    const freshOptions = viewFilterFieldOptions(f.key);
+    document.querySelectorAll('#superAdminContent select[multiple]').forEach(sel => {
+      if(!sel.id.endsWith(suffix)) return;
+      const selectedNow = new Set([...sel.selectedOptions].map(o => o.value));
+      sel.innerHTML = freshOptions.map(o => `<option value="${escapeHtml(o)}" ${selectedNow.has(o) ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('');
+    });
+  });
 }
 async function renderSuperAdminPanel(){
   const content = $('#superAdminContent');
