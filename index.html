@@ -1245,12 +1245,18 @@ const VIEW_FILTER_FIELDS = [
   {key:'Follow-Up Status', label:'Status'},
   {key:'Lead Quality', label:'Priority'},
 ];
+// Country = the full world list UNION whatever Country values are actually already
+// entered on real leads -- so nothing already in your data can ever be missing from
+// the picker (even a non-standard value typed before Country was a fixed dropdown),
+// while still allowing a Super Admin to pre-authorize a country with no leads yet.
+function countryFilterOptions(){
+  const set = new Set(COUNTRY_OPTIONS);
+  uniqueSorted('Country').forEach(c => set.add(c));
+  set.delete('India');
+  return ['India', ...[...set].sort((a, b) => a.localeCompare(b))];
+}
 function viewFilterFieldOptions(key){
-  // Country uses the full world list (same one the New Lead form's Country dropdown
-  // uses, India pinned first) rather than just countries already seen in past leads --
-  // a Super Admin should be able to pre-authorize someone for a country/region before
-  // any lead from there exists yet, not only after the fact.
-  if(key === 'Country') return COUNTRY_OPTIONS;
+  if(key === 'Country') return countryFilterOptions();
   if(key === 'State') return uniqueSorted('State');
   if(key === 'City') return uniqueSorted('City');
   if(key === 'Product Interest') return PRODUCT_OPTIONS;
