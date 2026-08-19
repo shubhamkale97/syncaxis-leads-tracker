@@ -697,6 +697,8 @@
     <div class="form-grid" id="addForm"></div>
     <datalist id="companyNameOptions"></datalist>
     <datalist id="deptSuggestList"></datalist>
+    <datalist id="stateSuggestList"></datalist>
+    <datalist id="citySuggestList"></datalist>
     <div class="form-field full" id="companySearchResultsBlock" style="display:none;">
       <label>Matches in Customer Master — name, GSTIN, or any field — click to select</label>
       <div id="companySearchResults"></div>
@@ -1044,7 +1046,94 @@ function refreshLocationOptions(){
   };
   merge('State', CUSTOM_STATES, STATE_OPTIONS);
   merge('City', CUSTOM_CITIES, CITY_OPTIONS);
-  merge('Country', CUSTOM_COUNTRIES, COUNTRY_OPTIONS);
+  refreshWorldCountryOptions();
+}
+
+// ============ Country → State → City cascade ============
+// Every country name below is copied verbatim from the free countriesnow.space API's
+// own master list (GET /countries/positions), so it's guaranteed to match what that
+// same API expects when we POST it back to fetch states/cities — no "Czechia" vs
+// "Czech Republic" style mismatches. India is pinned first since this is an
+// India-based team and most leads are domestic; everything else is A-Z.
+const WORLD_COUNTRIES_REST = ["Afghanistan","Albania","Algeria","AmericanSamoa","Andorra","Angola","Anguilla","Antarctica","Antigua and Barbuda","Argentina","Armenia","Aruba","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bermuda","Bhutan","Bolivia, Plurinational State of Bolivia","Bosnia and Herzegovina","Botswana","Bouvet Island","Brazil","British Indian Ocean Territory","Brunei Darussalam","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon","Canada","Cape Verde","Cayman Islands","Central African Republic","Chad","Chile","China","Christmas Island","Cocos (Keeling) Islands","Colombia","Comoros","Congo","Congo, The Democratic Republic of the","Cook Islands","Costa Rica","Ivory Coast","Croatia","Cuba","Cyprus","Czech Republic","Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Ethiopia","Falkland Islands","Faroe Islands","Fiji","Finland","France","French Polynesia","French Southern and Antarctic Lands","Gabon","Gambia","Georgia","Germany","Ghana","Gibraltar","Greece","Greenland","Grenada","Guadeloupe","Guam","Guatemala","Guernsey","Guinea","Guinea-Bissau","Guyana","Haiti","Heard Island and McDonald Islands","Vatican City State (Holy See)","Honduras","Hong Kong","Hungary","Iceland","Indonesia","Iran, Islamic Republic of","Iraq","Ireland","Isle of Man","Israel","Italy","Jamaica","Japan","Jersey","Jordan","Kazakhstan","Kenya","Kiribati","North Korea","South Korea","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libyan Arab Jamahiriya","Liechtenstein","Lithuania","Luxembourg","Macau","Macedonia, The Former Yugoslav Republic of","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Martinique","Mauritania","Mauritius","Mayotte","Mexico","Micronesia, Federated States of","Moldova, Republic of","Monaco","Mongolia","Montenegro","Montserrat","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands","Netherlands Antilles","New Caledonia","New Zealand","Nicaragua","Niger","Nigeria","Niue","Norfolk Island","Northern Mariana Islands","Norway","Oman","Pakistan","Palau","Palestinian Territory, Occupied","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Pitcairn","Poland","Portugal","Puerto Rico","Qatar","Réunion","Romania","Russia","Rwanda","Saint Helena, Ascension and Tristan Da Cunha","Saint Kitts and Nevis","Saint Lucia","Saint Pierre and Miquelon","Saint Vincent and the Grenadines","Samoa","San Marino","Sao Tome and Principe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","South Georgia and the South Sandwich Islands","Spain","Sri Lanka","Sudan","Suriname","Svalbard and Jan Mayen","Swaziland","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania, United Republic of","Thailand","Timor-Leste","Togo","Tokelau","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Turks and Caicos Islands","Tuvalu","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","United States Minor Outlying Islands","Uruguay","Uzbekistan","Vanuatu","Venezuela, Bolivarian Republic of","Vietnam","Virgin Islands, British","Virgin Islands, U.S.","Wallis and Futuna","Western Sahara","Yemen","Zambia","Zimbabwe"];
+function refreshWorldCountryOptions(){
+  const rest = new Set(WORLD_COUNTRIES_REST);
+  CUSTOM_COUNTRIES.forEach(c => { if(c && c !== 'India') rest.add(c); });
+  COUNTRY_OPTIONS.length = 0;
+  COUNTRY_OPTIONS.push('India', ...[...rest].sort((a,b) => a.localeCompare(b)));
+}
+refreshWorldCountryOptions(); // populate immediately so the very first render already has the full list
+
+// State/City are looked up live from the same free, no-key public API (embedding a
+// full offline world state/city dataset would add megabytes to this single-file app).
+// They stay free-typed <input list="..."> fields, not <select>, so an exact match to
+// the API's data is never a hard requirement -- the datalist is a suggestion, not a
+// constraint, and the field still works fine if the API is slow/unreachable.
+const GEO_API_BASE = 'https://countriesnow.space/api/v0.1/countries';
+const geoStatesCache = new Map(); // country -> string[]
+const geoCitiesCache = new Map(); // "country|state" -> string[]
+async function fetchStatesFor(country){
+  if(!country) return [];
+  if(geoStatesCache.has(country)) return geoStatesCache.get(country);
+  try{
+    const res = await fetch(`${GEO_API_BASE}/states`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({country}) });
+    const json = await res.json();
+    const states = (json && json.data && Array.isArray(json.data.states)) ? json.data.states.map(s => s.name).sort((a,b)=>a.localeCompare(b)) : [];
+    geoStatesCache.set(country, states);
+    return states;
+  }catch(err){ console.error('Could not fetch states for', country, err); return null; } // null = fetch failed, distinct from [] = fetched, genuinely none
+}
+async function fetchCitiesFor(country, state){
+  if(!country || !state) return [];
+  const cacheKey = country + '|' + state;
+  if(geoCitiesCache.has(cacheKey)) return geoCitiesCache.get(cacheKey);
+  try{
+    const res = await fetch(`${GEO_API_BASE}/state/cities`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({country, state}) });
+    const json = await res.json();
+    const cities = (json && Array.isArray(json.data)) ? json.data.slice().sort((a,b)=>a.localeCompare(b)) : [];
+    geoCitiesCache.set(cacheKey, cities);
+    return cities;
+  }catch(err){ console.error('Could not fetch cities for', country, state, err); return null; }
+}
+function fillDatalist(datalistId, values){
+  const dl = document.getElementById(datalistId);
+  if(dl) dl.innerHTML = values.map(v => `<option value="${escapeHtml(v)}">`).join('');
+}
+// Wires live Country -> State -> City fetching onto one trio of form fields, wherever
+// they appear (Add Lead form, Customer Master edit form). Falls back to the
+// historical STATE_OPTIONS/CITY_OPTIONS lists (already-seen values + admin additions)
+// if the live API can't be reached, so the fields are never left empty. Returns a
+// `prime(country, state)` function callers use to trigger the cascade for an
+// already-known value (autofill, draft restore, edit-prefill) without the user having
+// to touch the Country field themselves.
+function wireCountryStateCity(countryId, stateId, cityId, stateListId, cityListId){
+  const countryEl = document.getElementById(countryId), stateEl = document.getElementById(stateId), cityEl = document.getElementById(cityId);
+  if(!countryEl || !stateEl || !cityEl) return { prime(){} };
+  async function loadStates(country, keepValue){
+    const prevState = keepValue ? stateEl.value : '';
+    if(!country){ fillDatalist(stateListId, STATE_OPTIONS); return; }
+    const states = await fetchStatesFor(country);
+    if(countryEl.value !== country) return; // country changed again mid-fetch -- discard stale result
+    if(states === null){ showToast(`Could not fetch states for ${country} -- showing previously-used states instead.`, 'error'); fillDatalist(stateListId, STATE_OPTIONS); }
+    else if(states.length){ fillDatalist(stateListId, states); }
+    else { fillDatalist(stateListId, STATE_OPTIONS); }
+    if(prevState) stateEl.value = prevState;
+  }
+  async function loadCities(country, state, keepValue){
+    const prevCity = keepValue ? cityEl.value : '';
+    if(!country || !state){ fillDatalist(cityListId, CITY_OPTIONS); return; }
+    const cities = await fetchCitiesFor(country, state);
+    if(countryEl.value !== country || stateEl.value !== state) return; // stale
+    if(cities === null){ showToast(`Could not fetch cities for ${state} -- showing previously-used cities instead.`, 'error'); fillDatalist(cityListId, CITY_OPTIONS); }
+    else if(cities.length){ fillDatalist(cityListId, cities); }
+    else { fillDatalist(cityListId, CITY_OPTIONS); }
+    if(prevCity) cityEl.value = prevCity;
+  }
+  countryEl.addEventListener('change', () => { stateEl.value = ''; cityEl.value = ''; fillDatalist(cityListId, []); loadStates(countryEl.value, false); });
+  stateEl.addEventListener('change', () => { cityEl.value = ''; loadCities(countryEl.value, stateEl.value, false); });
+  stateEl.addEventListener('blur', () => { if(stateEl.value) loadCities(countryEl.value, stateEl.value, false); });
+  fillDatalist(stateListId, STATE_OPTIONS); fillDatalist(cityListId, CITY_OPTIONS); // instant fallback content before any fetch
+  return { prime(country, state){ if(country) loadStates(country, true); if(country && state) loadCities(country, state, true); } };
 }
 const LEAD_TYPE_OPTIONS = ['Project','Trading','Other']; // from INQUIRY_REGISTER sheet's "Lead Type" column
 const SOURCEPRO_OPTIONS = ['Yes','No']; // maps to the sheet's "Moved to Source Pro?" boolean column
@@ -2191,8 +2280,8 @@ const ADD_FIELDS = [
   {key:'Department', label:'Department / Group', type:'text', list:'deptSuggestList'},
   {key:'Visitor Name', label:'Contact Person', type:'text'},
   {key:'Country', label:'Country', type:'select', options: COUNTRY_OPTIONS, blankOption:true},
-  {key:'State', label:'State', type:'select', options: STATE_OPTIONS, required:true},
-  {key:'City', label:'City', type:'select', options: CITY_OPTIONS, required:true},
+  {key:'State', label:'State', type:'text', list:'stateSuggestList', required:true},
+  {key:'City', label:'City', type:'text', list:'citySuggestList', required:true},
   {key:'Application Category', label:'Application Category', type:'select', options: null, required:true},
   {key:'Application (as recorded)', label:'Application Detail', type:'text', full:true},
   {key:'Product Interest', label:'Product Interest', type:'select', options: PRODUCT_OPTIONS},
@@ -2213,6 +2302,7 @@ const ADD_FIELDS = [
   {key:'Notes', label:'Notes', type:'text', full:true},
 ];
 
+let addLeadGeoCascade = null; // set by buildAddForm(); lets other flows (customer-match autofill, draft restore) prime State/City for an already-known Country
 function buildAddForm(){
   const form = $('#addForm');
   form.innerHTML = ADD_FIELDS.map(f => {
@@ -2240,6 +2330,7 @@ function buildAddForm(){
   selectedContactChipId = null;
   refreshCompanyNameOptions();
   wireCompanyAutofill();
+  addLeadGeoCascade = wireCountryStateCity('add-Country', 'add-State', 'add-City', 'stateSuggestList', 'citySuggestList');
 }
 
 // ---- Customer Master auto-fill + multi-field search wiring for the Add Lead form ----
@@ -2306,6 +2397,7 @@ function applyCustomerMatch(cust){
   if(countryEl && cust.country) countryEl.value = cust.country;
   if(stateEl && cust.state) stateEl.value = cust.state;
   if(cityEl && cust.city) cityEl.value = cust.city;
+  if(addLeadGeoCascade && cust.country) addLeadGeoCascade.prime(cust.country, cust.state);
   if(statusBox){
     statusBox.textContent = `✓ Matched an existing customer — data auto-filled from ${cust.id}.`;
     statusBox.style.display = '';
@@ -2465,6 +2557,7 @@ function offerAddLeadDraftRestore(){
     const el = $('#add-' + slug(key));
     if(el && val) el.value = val;
   });
+  if(addLeadGeoCascade && saved.draft['Country']) addLeadGeoCascade.prime(saved.draft['Country'], saved.draft['State']);
   // Re-check the Company Name against Customer Master now that it's been restored,
   // so the match status / contact chips reflect the restored value.
   const nameInput = $('#add-Company-Name');
@@ -3881,8 +3974,10 @@ function renderCustomerEditForm(){
     <div class="mgmt-section-title" style="font-size:13px; grid-column:1/-1; margin:16px 0 2px;">Address</div>
     <div class="form-field full"><label>Address</label><input type="text" id="custEdit-address" value="${escapeHtml((c&&c.address)||'')}"></div>
     <div class="form-field"><label>Country</label><select id="custEdit-country">${sel(COUNTRY_OPTIONS, c&&c.country)}</select></div>
-    <div class="form-field"><label>State</label><select id="custEdit-state">${sel(STATE_OPTIONS, c&&c.state)}</select></div>
-    <div class="form-field"><label>City</label><select id="custEdit-city">${sel(CITY_OPTIONS, c&&c.city)}</select></div>
+    <div class="form-field"><label>State</label><input type="text" id="custEdit-state" list="custEditStateSuggestList" value="${escapeHtml((c&&c.state)||'')}"></div>
+    <div class="form-field"><label>City</label><input type="text" id="custEdit-city" list="custEditCitySuggestList" value="${escapeHtml((c&&c.city)||'')}"></div>
+    <datalist id="custEditStateSuggestList"></datalist>
+    <datalist id="custEditCitySuggestList"></datalist>
     <div class="form-field"><label>Pin Code</label><input type="text" id="custEdit-pinCode" value="${escapeHtml((c&&c.pinCode)||'')}"></div>
     <div class="form-field"><label>Phone 1</label><input type="tel" id="custEdit-phone" value="${escapeHtml((c&&c.phone)||'')}"></div>
     <div class="form-field"><label>Phone 2</label><input type="tel" id="custEdit-phone2" value="${escapeHtml((c&&c.phone2)||'')}"></div>
@@ -3929,6 +4024,8 @@ function renderCustomerEditForm(){
       }).catch(() => openPortal());
     });
   }
+  const geoCascade = wireCountryStateCity('custEdit-country', 'custEdit-state', 'custEdit-city', 'custEditStateSuggestList', 'custEditCitySuggestList');
+  if(c && c.country) geoCascade.prime(c.country, c.state);
 }
 function renderCustomerEditContacts(){
   const custId = customerEditModalId;
