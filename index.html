@@ -1454,7 +1454,7 @@ function renderBars(container, dataObj, color, order){
   const max = entries.length ? Math.max(...entries.map(e=>e[1])) : 1;
   container.innerHTML = entries.map(([label, val]) => `
     <div class="bar-row">
-      <div class="bar-label" title="${label}">${label}</div>
+      <div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(val/max*100).toFixed(1)}%; background:${color};"></div></div>
       <div class="bar-val">${val}</div>
     </div>`).join('');
@@ -1535,18 +1535,18 @@ function buildMatrix(groupKey){
   let maxCell = 0;
   groupTotals.forEach(([g]) => APP_CATS.forEach(a => { maxCell = Math.max(maxCell, groups[g][a]||0); }));
 
-  let html = '<table class="matrix"><thead><tr><th class="rowhead">' + groupKey.toUpperCase() + '</th>';
-  APP_CATS.forEach(a => html += `<th>${a}</th>`);
+  let html = '<table class="matrix"><thead><tr><th class="rowhead">' + escapeHtml(groupKey.toUpperCase()) + '</th>';
+  APP_CATS.forEach(a => html += `<th>${escapeHtml(a)}</th>`);
   html += '<th class="total">Total</th></tr></thead><tbody>';
 
   groupTotals.forEach(([g, gtotal]) => {
-    html += `<tr><td class="rowhead">${g}</td>`;
+    html += `<tr><td class="rowhead">${escapeHtml(g)}</td>`;
     APP_CATS.forEach(a => {
       const v = groups[g][a] || 0;
       const alpha = maxCell ? (v / maxCell) : 0;
       const bg = v === 0 ? 'transparent' : `rgba(74,144,217,${(0.12 + alpha*0.55).toFixed(2)})`;
       const cls = v === 0 ? 'cell zero' : 'cell';
-      html += `<td class="${cls}" style="background:${bg}" data-group="${g}" data-groupkey="${groupKey}" data-app="${a}">${v || '·'}</td>`;
+      html += `<td class="${cls}" style="background:${bg}" data-group="${escapeHtml(g)}" data-groupkey="${escapeHtml(groupKey)}" data-app="${escapeHtml(a)}">${v || '·'}</td>`;
     });
     html += `<td class="total">${gtotal}</td></tr>`;
   });
@@ -1614,7 +1614,7 @@ function renderInsight(){
 // ============ Filters + editable table ============
 function uniqueSorted(key){ return [...new Set(workingLeads.map(r => r[key]).filter(Boolean))].sort(); }
 function fillSelect(sel, values, placeholder){
-  sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v=>`<option value="${v}">${v}</option>`).join('');
+  sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
 }
 function refreshFilterOptions(){
   const keepState = $('#stateFilter').value, keepCity = $('#cityFilter').value, keepApp = $('#appFilter').value,
@@ -1725,9 +1725,9 @@ function rowHtml(r){
       <td data-label="Enquiry No"><div class="enquiry-cell priority-${priorityKey(r['Lead Quality'])}"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
       <td data-label="Company"><input class="cell-input" data-field="Company Name" value="${(r['Company Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
       <td data-label="Visitor"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
-      <td data-label="State">${r.State}</td>
-      <td data-label="City">${r.City}</td>
-      <td data-label="Application">${r['Application Category']}${r['Application (as recorded)'] ? ` <span style="color:var(--text-faint)">(${r['Application (as recorded)']})</span>` : ''}</td>
+      <td data-label="State">${escapeHtml(r.State)}</td>
+      <td data-label="City">${escapeHtml(r.City)}</td>
+      <td data-label="Application">${escapeHtml(r['Application Category'])}${r['Application (as recorded)'] ? ` <span style="color:var(--text-faint)">(${escapeHtml(r['Application (as recorded)'])})</span>` : ''}</td>
       <td data-label="Product">${productTag(r['Product Interest'])}</td>
       <td data-label="Email"><input class="cell-input" type="email" data-field="Email ID" value="${(r['Email ID']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Email ID']||'').replace(/"/g,'&quot;')}" style="min-width:190px;"></td>
       <td data-label="Phone"><input class="cell-input" type="tel" data-field="Phone No." value="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" style="min-width:130px;"></td>
@@ -1928,7 +1928,7 @@ function buildAddForm(){
     if(f.type === 'select'){
       const opts = f.options || APP_CATS;
       const blank = f.blankOption ? `<option value="" selected>—</option>` : '';
-      input = `<select id="add-${slug(f.key)}">${blank}${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+      input = `<select id="add-${slug(f.key)}">${blank}${opts.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}</select>`;
     } else {
       input = `<input id="add-${slug(f.key)}" type="${f.type}" placeholder="${f.label}${f.required?' *':''}">`;
     }
