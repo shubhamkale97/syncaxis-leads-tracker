@@ -1246,7 +1246,11 @@ const VIEW_FILTER_FIELDS = [
   {key:'Lead Quality', label:'Priority'},
 ];
 function viewFilterFieldOptions(key){
-  if(key === 'Country') return uniqueSorted('Country');
+  // Country uses the full world list (same one the New Lead form's Country dropdown
+  // uses, India pinned first) rather than just countries already seen in past leads --
+  // a Super Admin should be able to pre-authorize someone for a country/region before
+  // any lead from there exists yet, not only after the fact.
+  if(key === 'Country') return COUNTRY_OPTIONS;
   if(key === 'State') return uniqueSorted('State');
   if(key === 'City') return uniqueSorted('City');
   if(key === 'Product Interest') return PRODUCT_OPTIONS;
