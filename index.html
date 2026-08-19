@@ -441,6 +441,13 @@
   .contact-chip:hover{ border-color: var(--blue); color: var(--text); }
   .contact-chip b{ color: var(--text); font-size:12px; }
   .contact-chip.selected{ border-color: var(--amber); background: var(--amber-dim); }
+  .search-result-row{
+    display:block; width:100%; text-align:left; background: var(--panel-2); border:1px solid var(--line);
+    border-radius:8px; padding:8px 10px; margin-bottom:6px; cursor:pointer; font-family: var(--font-body); color: var(--text-dim);
+  }
+  .search-result-row:hover, .search-result-row.highlighted{ border-color: var(--blue); color: var(--text); }
+  .search-result-row b{ color: var(--text); }
+  .search-result-row .match-reason{ font-size:11px; color: var(--text-faint); margin-top:3px; }
 </style>
 </head>
 <body>
@@ -596,6 +603,10 @@
     <div class="form-grid" id="addForm"></div>
     <datalist id="companyNameOptions"></datalist>
     <datalist id="deptSuggestList"></datalist>
+    <div class="form-field full" id="companySearchResultsBlock" style="display:none;">
+      <label>Matches in Customer Master — name, GSTIN, or any field — click to select</label>
+      <div id="companySearchResults"></div>
+    </div>
     <div class="form-field full" id="companyMatchStatus" style="display:none; font-size:11.5px; color:var(--text-faint);"></div>
     <div class="form-field full" id="companyMatchBlock" style="display:none;">
       <label>Existing contacts at this company — click to auto-fill</label>
@@ -2063,12 +2074,14 @@ function buildAddForm(){
   if(chipsBox) chipsBox.innerHTML = '';
   const statusBox = $('#companyMatchStatus');
   if(statusBox){ statusBox.style.display = 'none'; statusBox.textContent = ''; }
+  const searchBlock = $('#companySearchResultsBlock');
+  if(searchBlock) searchBlock.style.display = 'none';
   selectedContactChipId = null;
   refreshCompanyNameOptions();
   wireCompanyAutofill();
 }
 
-// ---- Customer Master auto-fill wiring for the Add Lead form ----
+// ---- Customer Master auto-fill + multi-field search wiring for the Add Lead form ----
 function refreshCompanyNameOptions(){
   const dl = $('#companyNameOptions');
   if(!dl) return;
@@ -2082,70 +2095,162 @@ function findCustomerByName(name){
   const id = Object.keys(customerMaster).find(cid => (customerMaster[cid].companyName||'').trim().toLowerCase() === norm);
   return id ? { id, ...customerMaster[id] } : null;
 }
+// Every field worth searching on a customer — company-level plus every one of its
+// contacts' fields — so "search by name, GST number, or any field" is literal, not
+// just a company-name lookup.
+function customerSearchFields(custId, cust){
+  const gst = cust.gst || {};
+  const fields = [
+    {label:'Customer ID', value: custId},
+    {label:'Company', value: cust.companyName},
+    {label:'Country', value: cust.country}, {label:'State', value: cust.state}, {label:'City', value: cust.city},
+    {label:'Address', value: cust.address},
+    {label:'GSTIN', value: gst.gstin}, {label:'GST Status', value: gst.status},
+    {label:'GST Legal Name', value: gst.legalName}, {label:'GST Reg. Date', value: gst.registrationDate},
+  ];
+  Object.values(cust.contacts || {}).forEach(c => {
+    fields.push(
+      {label:'Department', value: c.department}, {label:'Contact', value: c.contactPerson},
+      {label:'Designation', value: c.designation}, {label:'Email', value: c.email},
+      {label:'Phone', value: c.phone}, {label:'Notes', value: c.notes},
+    );
+  });
+  return fields.filter(f => f.value);
+}
+function searchCustomers(query){
+  const q = query.trim().toLowerCase();
+  if(q.length < 2) return [];
+  const results = [];
+  Object.entries(customerMaster).forEach(([custId, cust]) => {
+    const matches = customerSearchFields(custId, cust).filter(f => String(f.value).toLowerCase().includes(q));
+    if(matches.length) results.push({ custId, cust, matches });
+  });
+  // Company-name-starts-with matches first (most likely what was meant), then A-Z.
+  results.sort((a, b) => {
+    const aFirst = (a.cust.companyName || '').toLowerCase().startsWith(q) ? 0 : 1;
+    const bFirst = (b.cust.companyName || '').toLowerCase().startsWith(q) ? 0 : 1;
+    return aFirst !== bFirst ? aFirst - bFirst : (a.cust.companyName || '').localeCompare(b.cust.companyName || '');
+  });
+  return results.slice(0, 8); // keep the dropdown short and scannable
+}
+// Fills Country/State/City/status/contact-chips from a matched customer record —
+// shared by both "typed an exact company name" and "clicked a search result".
+function applyCustomerMatch(cust){
+  selectedContactChipId = null;
+  const deptList = $('#deptSuggestList');
+  const chipsBox = $('#companyContactChips');
+  const matchBlock = $('#companyMatchBlock');
+  const statusBox = $('#companyMatchStatus');
+  const countryEl = $('#add-Country'), stateEl = $('#add-State'), cityEl = $('#add-City');
+  if(countryEl && cust.country) countryEl.value = cust.country;
+  if(stateEl && cust.state) stateEl.value = cust.state;
+  if(cityEl && cust.city) cityEl.value = cust.city;
+  if(statusBox){
+    statusBox.textContent = `✓ Matched an existing customer — data auto-filled from ${cust.id}.`;
+    statusBox.style.display = '';
+  }
+  const contacts = Object.entries(cust.contacts || {});
+  if(deptList) deptList.innerHTML = [...new Set(contacts.map(([,c])=>c.department).filter(Boolean))]
+    .map(d => `<option value="${escapeHtml(d)}">`).join('');
+  if(!contacts.length){ if(matchBlock) matchBlock.style.display = 'none'; return; }
+  if(matchBlock) matchBlock.style.display = '';
+  if(chipsBox){
+    chipsBox.innerHTML = contacts.map(([cid, c]) => `
+      <button type="button" class="contact-chip" data-contact-id="${cid}">
+        <b>${escapeHtml(c.department || 'No department')}</b>
+        <span>${escapeHtml(c.contactPerson || 'No name')}${c.designation ? ' · ' + escapeHtml(c.designation) : ''}</span>
+      </button>`).join('');
+    chipsBox.querySelectorAll('.contact-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const [, c] = contacts.find(([cid]) => cid === btn.dataset.contactId);
+        const deptEl = $('#add-Department'), visitorEl = $('#add-Visitor-Name'), emailEl = $('#add-Email-ID'), phoneEl = $('#add-Phone-No-');
+        if(deptEl) deptEl.value = c.department || '';
+        if(visitorEl) visitorEl.value = c.contactPerson || '';
+        if(emailEl) emailEl.value = c.email || '';
+        if(phoneEl) phoneEl.value = c.phone || '';
+        selectedContactChipId = btn.dataset.contactId;
+        chipsBox.querySelectorAll('.contact-chip').forEach(b => b.classList.toggle('selected', b === btn));
+      });
+    });
+  }
+}
+function clearCustomerMatchUI(typedName){
+  selectedContactChipId = null;
+  const deptList = $('#deptSuggestList');
+  const matchBlock = $('#companyMatchBlock');
+  const statusBox = $('#companyMatchStatus');
+  if(deptList) deptList.innerHTML = '';
+  if(matchBlock) matchBlock.style.display = 'none';
+  if(statusBox){
+    if(typedName){ statusBox.textContent = '🆕 New company — a unique Customer ID will be created for it when you save.'; statusBox.style.display = ''; }
+    else statusBox.style.display = 'none';
+  }
+}
+let searchHighlightIndex = -1;
+let currentSearchResults = [];
+function renderSearchResults(results){
+  currentSearchResults = results;
+  searchHighlightIndex = -1;
+  const block = $('#companySearchResultsBlock');
+  const box = $('#companySearchResults');
+  if(!block || !box) return;
+  if(!results.length){ block.style.display = 'none'; box.innerHTML = ''; return; }
+  block.style.display = '';
+  box.innerHTML = results.map((r, i) => {
+    const reasons = r.matches.slice(0, 3).map(m => `${escapeHtml(m.label)}: ${escapeHtml(String(m.value))}`).join(' · ');
+    return `<button type="button" class="search-result-row" data-idx="${i}">
+      <b>${escapeHtml(r.cust.companyName)}</b> <span style="color:var(--text-faint); font-family:var(--font-mono); font-size:10.5px;">${escapeHtml(r.custId)}</span>
+      <div class="match-reason">${reasons}</div>
+    </button>`;
+  }).join('');
+  box.querySelectorAll('.search-result-row').forEach(btn => {
+    btn.addEventListener('click', () => selectSearchResult(Number(btn.dataset.idx)));
+  });
+}
+function selectSearchResult(idx){
+  const r = currentSearchResults[idx];
+  if(!r) return;
+  const nameInput = $('#add-Company-Name');
+  if(nameInput) nameInput.value = r.cust.companyName;
+  applyCustomerMatch({ id: r.custId, ...r.cust });
+  const block = $('#companySearchResultsBlock');
+  if(block) block.style.display = 'none';
+}
 let selectedContactChipId = null;
 function wireCompanyAutofill(){
   const nameInput = $('#add-Company-Name');
   if(!nameInput) return;
-  const onCompanyChange = () => {
-    selectedContactChipId = null;
+  const onType = () => renderSearchResults(searchCustomers(nameInput.value));
+  const onCommit = () => {
     const typedName = nameInput.value.trim();
     const cust = findCustomerByName(typedName);
-    const deptList = $('#deptSuggestList');
-    const chipsBox = $('#companyContactChips');
-    const matchBlock = $('#companyMatchBlock');
-    const statusBox = $('#companyMatchStatus');
-    if(!cust){
-      if(deptList) deptList.innerHTML = '';
-      if(matchBlock) matchBlock.style.display = 'none';
-      if(statusBox){
-        if(typedName){
-          statusBox.textContent = '🆕 New company — a unique Customer ID will be created for it when you save.';
-          statusBox.style.display = '';
-        } else {
-          statusBox.style.display = 'none';
-        }
-      }
-      return;
-    }
-    // Auto-fetch company-level details.
-    const countryEl = $('#add-Country'), stateEl = $('#add-State'), cityEl = $('#add-City');
-    if(countryEl && cust.country) countryEl.value = cust.country;
-    if(stateEl && cust.state) stateEl.value = cust.state;
-    if(cityEl && cust.city) cityEl.value = cust.city;
-    if(statusBox){
-      statusBox.textContent = `✓ Matched an existing customer — data auto-filled from ${cust.id}.`;
-      statusBox.style.display = '';
-    }
-    const contacts = Object.entries(cust.contacts || {});
-    if(deptList) deptList.innerHTML = [...new Set(contacts.map(([,c])=>c.department).filter(Boolean))]
-      .map(d => `<option value="${escapeHtml(d)}">`).join('');
-    if(!contacts.length){
-      if(matchBlock) matchBlock.style.display = 'none';
-      return;
-    }
-    if(matchBlock) matchBlock.style.display = '';
-    if(chipsBox){
-      chipsBox.innerHTML = contacts.map(([cid, c]) => `
-        <button type="button" class="contact-chip" data-contact-id="${cid}">
-          <b>${escapeHtml(c.department || 'No department')}</b>
-          <span>${escapeHtml(c.contactPerson || 'No name')}${c.designation ? ' · ' + escapeHtml(c.designation) : ''}</span>
-        </button>`).join('');
-      chipsBox.querySelectorAll('.contact-chip').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const [, c] = contacts.find(([cid]) => cid === btn.dataset.contactId);
-          const deptEl = $('#add-Department'), visitorEl = $('#add-Visitor-Name'), emailEl = $('#add-Email-ID'), phoneEl = $('#add-Phone-No-');
-          if(deptEl) deptEl.value = c.department || '';
-          if(visitorEl) visitorEl.value = c.contactPerson || '';
-          if(emailEl) emailEl.value = c.email || '';
-          if(phoneEl) phoneEl.value = c.phone || '';
-          selectedContactChipId = btn.dataset.contactId;
-          chipsBox.querySelectorAll('.contact-chip').forEach(b => b.classList.toggle('selected', b === btn));
-        });
-      });
-    }
+    if(cust) applyCustomerMatch(cust); else clearCustomerMatchUI(typedName);
+    const block = $('#companySearchResultsBlock');
+    if(block) block.style.display = 'none';
   };
-  nameInput.addEventListener('change', onCompanyChange);
-  nameInput.addEventListener('blur', onCompanyChange);
+  nameInput.addEventListener('input', onType);
+  nameInput.addEventListener('change', onCommit);
+  // Delayed so a click on a search-result row (which also blurs the input) has time
+  // to register its own click handler before the results get hidden here.
+  nameInput.addEventListener('blur', () => setTimeout(onCommit, 150));
+  nameInput.addEventListener('keydown', e => {
+    if(!currentSearchResults.length || $('#companySearchResultsBlock').style.display === 'none') return;
+    const rows = [...$('#companySearchResults').querySelectorAll('.search-result-row')];
+    if(e.key === 'ArrowDown'){
+      e.preventDefault();
+      searchHighlightIndex = Math.min(searchHighlightIndex + 1, rows.length - 1);
+      rows.forEach((row, i) => row.classList.toggle('highlighted', i === searchHighlightIndex));
+    } else if(e.key === 'ArrowUp'){
+      e.preventDefault();
+      searchHighlightIndex = Math.max(searchHighlightIndex - 1, 0);
+      rows.forEach((row, i) => row.classList.toggle('highlighted', i === searchHighlightIndex));
+    } else if(e.key === 'Enter' && searchHighlightIndex >= 0){
+      e.preventDefault();
+      selectSearchResult(searchHighlightIndex);
+    } else if(e.key === 'Escape'){
+      $('#companySearchResultsBlock').style.display = 'none';
+    }
+  });
 }
 
 function suggestNextEnquiryNumber(){
