@@ -3741,8 +3741,15 @@ function readViewFilterBuilder(idPrefix){
   VIEW_FILTER_FIELDS.forEach(f => {
     const list = $(`#${idPrefix}-${slug(f.key)}`);
     if(!list) return;
-    const vals = [...list.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
-    if(vals.length) vf[f.key] = vals;
+    const allBoxes = list.querySelectorAll('input[type="checkbox"]');
+    const checked = [...allBoxes].filter(cb => cb.checked);
+    // Checking every box (e.g. via "Select all") must mean the SAME thing as leaving
+    // none checked -- truly no restriction on this field, including leads with a
+    // BLANK value for it. Storing it as a literal list of every non-blank value
+    // instead would wrongly exclude any lead that has nothing set for this field
+    // yet, which is exactly what "Select all" was meant to avoid. Only a genuine
+    // partial selection (some but not all boxes) should actually restrict.
+    if(checked.length && checked.length < allBoxes.length) vf[f.key] = checked.map(cb => cb.value);
   });
   return vf;
 }
