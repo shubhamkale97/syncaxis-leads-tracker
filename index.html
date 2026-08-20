@@ -1188,11 +1188,14 @@ const SOURCEPRO_OPTIONS = ['Yes','No']; // maps to the sheet's "Moved to Source 
 const CLOSED_STATUSES = ['Won','Lost','Not Relevant']; // a lead in one of these is no longer "open pipeline"
 // Financial-year code used to suggest an Enquiry Number, e.g. Aug 2026 -> "2627" (FY runs Apr-Mar,
 // matching the sheet's "SI/2627/xxxx" numbering). Purely a starting suggestion — always editable.
+// Format matches the team's real enquiry register exactly (e.g. "2627", no hyphen --
+// confirmed from INQUIRY_REGISTER_FOLLOWUP_2026-2027.xlsx's own "SI/2627/1001" style
+// numbers), not the "26-27" format this used before that register was seen.
 function currentFYCode(){
   const d = new Date();
   const y = d.getFullYear();
   const startYear = d.getMonth() >= 3 ? y : y - 1; // April (month index 3) starts the FY
-  return String(startYear).slice(-2) + '-' + String(startYear + 1).slice(-2);
+  return String(startYear).slice(-2) + String(startYear + 1).slice(-2);
 }
 // Same FY-code logic, but for an arbitrary date (a lead's own Received Date) rather
 // than always today -- used by the Enquiry Number backfill below so an old lead gets
@@ -1203,7 +1206,17 @@ function fyCodeForDate(dateStr){
   if(!d || isNaN(d.getTime())) return currentFYCode();
   const y = d.getFullYear();
   const startYear = d.getMonth() >= 3 ? y : y - 1;
-  return String(startYear).slice(-2) + '-' + String(startYear + 1).slice(-2);
+  return String(startYear).slice(-2) + String(startYear + 1).slice(-2);
+}
+// Which numbering block a lead's Product Interest falls into, matching the team's
+// real register: Rexroth-line leads get "SI/<FY>/1NNN", Dobot-line leads get
+// "SI/<FY>/2NNN". "Dobot + Rexroth", "Vision System", blank, or anything else that
+// isn't clearly one or the other defaults to the Rexroth block -- a documented
+// assumption (the source register has no precedent for a mixed/other case), not a
+// rule confirmed from real data.
+function registerBlockFor(productInterest){
+  const s = String(productInterest || '').toLowerCase();
+  return (s.includes('dobot') && !s.includes('rexroth')) ? 'dobot' : 'rexroth';
 }
 
 // BASE_LEADS (declared above, in the first <script> block) is mutable so it can be
@@ -2592,20 +2605,295 @@ function wireCompanyAutofill(){
   });
 }
 
-function suggestNextEnquiryNumber(){
-  // Pattern: SYNC/SI/26-27/000001, next one .../000002, ... (six-digit serial,
-  // restarting at 000001 each financial year). A starting point only, always
-  // editable/overridable, and never touches any existing lead's stored number.
-  const prefix = `SYNC/SI/${currentFYCode()}/`;
-  let maxN = 0;
+// Pattern: SI/<FY>/1NNN for Rexroth-line leads, SI/<FY>/2NNN for Dobot-line leads --
+// matches the team's real register exactly, continuing on from its real numbers
+// (1120 for Rexroth, 2051 for Dobot as of the 2026-27 import) rather than colliding
+// with them. A starting point only, always editable/overridable, and never touches
+// any existing lead's stored number.
+function nextRegisterNumber(fyCode, productInterest){
+  const block = registerBlockFor(productInterest);
+  const prefix = `SI/${fyCode}/${block === 'dobot' ? '2' : '1'}`;
+  const base = block === 'dobot' ? 2000 : 1000;
+  let maxN = base;
   workingLeads.forEach(r => {
     const v = String(r['Enquiry Number'] || '');
     if(v.startsWith(prefix)){
-      const n = parseInt(v.slice(prefix.length), 10);
+      const n = parseInt(v.slice(prefix.length - 1), 10); // keep the block digit as part of the number
       if(!isNaN(n) && n > maxN) maxN = n;
     }
   });
-  return `${prefix}${String(maxN + 1).padStart(6, '0')}`;
+  return `SI/${fyCode}/${maxN + 1}`;
+}
+function suggestNextEnquiryNumber(productInterest){
+  return nextRegisterNumber(currentFYCode(), productInterest);
+}
+
+// ============ Import Team Enquiry Register (one-time, Super Admin only) ============
+// Maps the team's real INQUIRY_REGISTER_FOLLOWUP xlsx (Rexroth + Dobot sheets) into
+// this app's lead schema. Everything below is a pure, side-effect-free DRY RUN until
+// commitRegisterImportPlan() is explicitly called after the Super Admin reviews the
+// preview -- parsing a file, even a large one, never touches Firestore by itself.
+
+// Excel status text -> this app's STATUS_OPTIONS. An exact match passes through
+// unchanged; anything else falls back to a close equivalent so the Follow-Up Status
+// dropdown still shows something sensible rather than a blank selection -- the
+// ORIGINAL excel text is preserved in the lead's Notes either way, so nothing is
+// silently lost even when it doesn't map cleanly.
+const REGISTER_STATUS_FALLBACK = { 'Inprocess': 'Contacted', 'In Process': 'Contacted', 'In process': 'Contacted' };
+function mapRegisterStatus(raw){
+  const s = String(raw || '').trim();
+  if(!s) return 'Not Contacted';
+  if(STATUS_OPTIONS.includes(s)) return s;
+  return REGISTER_STATUS_FALLBACK[s] || 'Contacted';
+}
+function mapRegisterQuality(raw){
+  const s = String(raw || '');
+  if(s.includes('Hot')) return '🔥 Hot';
+  if(s.includes('Warm')) return '🌤 Warm';
+  if(s.includes('Cold')) return '❄️ Cold';
+  return '';
+}
+function mapRegisterProductInterest(leadFor){
+  const s = String(leadFor || '').trim();
+  if(/^rexroth$/i.test(s)) return 'Rexroth';
+  if(/^dobot$/i.test(s)) return 'Dobot';
+  return s || 'Not Specified';
+}
+// The excel's "Phone / Email" column is sometimes just a phone number (when a
+// separate Email column also exists, e.g. the Rexroth sheet), and sometimes a single
+// combined "phone / email" cell (the Dobot sheet, which has no separate Email
+// column) -- handle both shapes rather than assuming one.
+function splitRegisterPhoneEmail(combinedRaw, explicitEmailRaw){
+  const explicitEmail = String(explicitEmailRaw || '').trim();
+  const raw = String(combinedRaw || '').trim();
+  if(explicitEmail) return { phone: raw, email: explicitEmail };
+  if(raw.includes('@') && raw.includes('/')){
+    const parts = raw.split('/').map(s => s.trim()).filter(Boolean);
+    const email = parts.find(p => p.includes('@')) || '';
+    const phone = parts.find(p => !p.includes('@')) || '';
+    return { phone, email };
+  }
+  if(raw.includes('@')) return { phone: '', email: raw };
+  return { phone: raw, email: '' };
+}
+function registerDateToISO(val){
+  if(val instanceof Date && !isNaN(val.getTime())){
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, '0')}-${String(val.getDate()).padStart(2, '0')}`;
+  }
+  const s = String(val || '').trim();
+  if(!s) return '';
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/); // dd/mm/yyyy or dd-mm-yyyy fallback
+  if(m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+async function ensureRegisterWorkbook(file){
+  const ok = await ensureSheetJS();
+  if(!ok || !window.XLSX) throw new Error('Could not load the Excel parsing library — check your internet connection and try again.');
+  const buf = await file.arrayBuffer();
+  return XLSX.read(buf, { type: 'array', cellDates: true });
+}
+function registerSheetRows(wb, sheetName, headerRowIndex){
+  const ws = wb.Sheets[sheetName];
+  if(!ws) return [];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const header = (aoa[headerRowIndex - 1] || []).map(h => String(h || '').trim());
+  const rows = [];
+  for(let i = headerRowIndex; i < aoa.length; i++){
+    const raw = aoa[i];
+    if(!raw) continue;
+    const obj = {};
+    header.forEach((h, idx) => { if(h) obj[h] = raw[idx] != null ? raw[idx] : ''; });
+    if(String(obj['Inquiry No'] || '').trim()) rows.push(obj);
+  }
+  return rows;
+}
+function mapRegisterRow(row, block){
+  const { phone, email } = splitRegisterPhoneEmail(row['Phone / Email'], row['Email']);
+  const notesParts = [];
+  if(row['Remark']) notesParts.push(String(row['Remark']).trim());
+  const extras = [];
+  const quotationNo = row['QUOTATION  NO'] || row['QUOTATION NO'];
+  if(quotationNo) extras.push(`Quotation No: ${quotationNo}`);
+  const qDate = registerDateToISO(row['QUOTATION DATE']);
+  if(qDate) extras.push(`Quotation Date: ${qDate}`);
+  if(row['Order Value']) extras.push(`Order Value: ₹${row['Order Value']}`);
+  const excelStatus = String(row['Current Status'] || '').trim();
+  const mappedStatus = mapRegisterStatus(excelStatus);
+  if(excelStatus && excelStatus !== mappedStatus) extras.push(`Excel status: ${excelStatus}`);
+  if(extras.length) notesParts.push(`[From register] ${extras.join(' · ')}`);
+
+  return {
+    'Enquiry Number': String(row['Inquiry No'] || '').trim(),
+    'Company Name': String(row['Company / Lead Name'] || '').trim(),
+    'Department': '',
+    'Visitor Name': String(row['Contact Person'] || '').trim(),
+    // The register has no Country/State/City columns at all -- Country defaults to
+    // India (this is an India-based team; nothing in the source suggests otherwise),
+    // State/City are left blank rather than guessed, since there's genuinely no data
+    // to base them on.
+    'Country': 'India', 'State': '', 'City': '',
+    'Application Category': 'Not Specified',
+    'Application (as recorded)': String(row['Product/Requirement'] || '').trim(),
+    'Product Interest': mapRegisterProductInterest(row['Lead For']),
+    'Email ID': email,
+    'Phone No.': phone,
+    'Card Collected': 'Not Recorded',
+    'Follow-Up Status': mappedStatus,
+    'Lead Quality': mapRegisterQuality(row['Lead Quality']),
+    'Inquiry Source': String(row['Inquiry Source'] || '').trim(),
+    'Lead Type': LEAD_TYPE_OPTIONS.includes(String(row['Lead Type'] || '').trim()) ? String(row['Lead Type']).trim() : '',
+    'Moved to SourcePro': (row['Moved to Source Pro?'] === true || String(row['Moved to Source Pro?']).toLowerCase() === 'true') ? 'Yes' : 'No',
+    'Lead Value': Number(row['Expected Value']) || 0,
+    'Lead Generated By': String(row['Marketing Person Name'] || '').trim(),
+    'Enquiry Assigned To': String(row['Sales Person Name'] || '').trim(),
+    'Next Follow-up Date': registerDateToISO(row['Next Follow-up Date']),
+    'ERP Lead Number': String(row['ERP Lead No'] || '').trim(),
+    'Order No': String(row['Order No'] || '').trim(),
+    'Order Date': registerDateToISO(row['Order Date']),
+    'Received Date': registerDateToISO(row[' Received Date'] || row['Received Date']),
+    'Notes': notesParts.join(' ').trim(),
+    'Area (as recorded)': '',
+    '_block': block,
+  };
+}
+async function buildRegisterImportPlan(file){
+  const wb = await ensureRegisterWorkbook(file);
+  const rexroth = registerSheetRows(wb, 'INQUIRY_REGISTER_Rexroth', 1).map(r => mapRegisterRow(r, 'rexroth'));
+  const dobot = registerSheetRows(wb, 'INQUIRY_REGISTER_Dobot', 4).map(r => mapRegisterRow(r, 'dobot'));
+  const parsed = [...rexroth, ...dobot];
+  if(!parsed.length) throw new Error('No rows found — expected sheets named "INQUIRY_REGISTER_Rexroth" and "INQUIRY_REGISTER_Dobot".');
+
+  // Skip anything whose exact Enquiry Number is already present in the live data --
+  // makes this safe to re-run without creating duplicates if it's ever run twice.
+  const existingNumbers = new Set(workingLeads.map(r => String(r['Enquiry Number'] || '').trim()).filter(Boolean));
+  const alreadyPresent = parsed.filter(rec => existingNumbers.has(rec['Enquiry Number']));
+  const toImport = parsed.filter(rec => !existingNumbers.has(rec['Enquiry Number']));
+
+  let nextSr = Math.max(BASE_MAX_SR, ...newLeads.map(x => Number(x['Sr.no'])), BASE_MAX_SR);
+  const newLeadRecords = toImport.map(rec => {
+    nextSr += 1;
+    const { _block, ...clean } = rec;
+    clean['Sr.no'] = nextSr;
+    clean['Attended By'] = currentUser || 'Teammate';
+    clean['Product Interest (as recorded)'] = clean['Product Interest'];
+    return clean;
+  });
+
+  // Seed per-FY-per-block counters from both the freshly-imported real numbers and
+  // whatever's already live, so the existing-134 renumbering below can never collide
+  // with either -- same key shape ("fy|block") as autofillMissingEnquiryNumbers().
+  const maxSeqByKey = {};
+  const seed = num => {
+    const m = String(num || '').match(/^SI\/(\d{4})\/([12])(\d+)$/);
+    if(!m) return;
+    const key = `${m[1]}|${m[2] === '2' ? 'dobot' : 'rexroth'}`;
+    const n = parseInt(m[2] + m[3], 10);
+    if(!maxSeqByKey[key] || n > maxSeqByKey[key]) maxSeqByKey[key] = n;
+  };
+  newLeadRecords.forEach(r => seed(r['Enquiry Number']));
+  workingLeads.forEach(r => seed(r['Enquiry Number']));
+
+  // "The 134" = every lead from the original base dataset (predates this whole
+  // register), identified the same way the rest of the app already distinguishes
+  // base data from anything added since: Sr.no <= BASE_MAX_SR.
+  const base134 = workingLeads
+    .filter(r => Number(r['Sr.no']) <= BASE_MAX_SR)
+    .sort((a, b) => Number(a['Sr.no']) - Number(b['Sr.no']));
+  const existingLeadUpdates = base134.map(r => {
+    const block = registerBlockFor(r['Product Interest']);
+    const fy = fyCodeForDate(r['Received Date']);
+    const key = `${fy}|${block}`;
+    const base = block === 'dobot' ? 2000 : 1000;
+    const next = (maxSeqByKey[key] || base) + 1;
+    maxSeqByKey[key] = next;
+    return {
+      srno: String(r['Sr.no']),
+      companyName: r['Company Name'] || '(no company name)',
+      oldEnquiryNumber: r['Enquiry Number'] || '(blank)',
+      newEnquiryNumber: `SI/${fy}/${next}`,
+      oldSource: r['Inquiry Source'] || '(blank)',
+    };
+  });
+
+  return {
+    newLeadRecords, existingLeadUpdates, skipped: alreadyPresent,
+    sourceRexrothCount: rexroth.length, sourceDobotCount: dobot.length,
+  };
+}
+function renderRegisterImportPreview(plan){
+  const preview = $('#registerImportPreview');
+  const { newLeadRecords, existingLeadUpdates, skipped } = plan;
+  const sampleNew = newLeadRecords.slice(0, 5);
+  const sampleExisting = existingLeadUpdates.slice(0, 5);
+  preview.innerHTML = `
+    <div class="section-note" style="margin:10px 0;">
+      <b>${newLeadRecords.length}</b> new leads to import (${plan.sourceRexrothCount} Rexroth + ${plan.sourceDobotCount} Dobot rows in the file${skipped.length ? `, ${skipped.length} already present by Enquiry Number and skipped` : ''}).<br>
+      <b>${existingLeadUpdates.length}</b> existing lead${existingLeadUpdates.length === 1 ? '' : 's'} will get Inquiry Source = "Automation Expo 2026" and a new Enquiry Number.<br>
+      Imported leads have no State/City (the register doesn't record it) — Country defaults to India.
+    </div>
+    <div style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:10px; font-family:var(--font-mono); font-size:11px;">
+      <b>New leads (first 5):</b><br>
+      ${sampleNew.map(r => `${escapeHtml(r['Enquiry Number'])} — ${escapeHtml(r['Company Name'])} — ${escapeHtml(r['Inquiry Source'])}`).join('<br>') || '(none)'}
+      <br><br><b>Existing leads being renumbered (first 5):</b><br>
+      ${sampleExisting.map(r => `${escapeHtml(r.companyName)}: ${escapeHtml(r.oldEnquiryNumber)} → ${escapeHtml(r.newEnquiryNumber)}`).join('<br>') || '(none)'}
+    </div>
+    <button class="btn btn-primary" id="registerImportCommitBtn">Confirm Import (${newLeadRecords.length} new + ${existingLeadUpdates.length} updated)</button>
+    <div class="section-note" id="registerImportStatus" style="margin-top:10px;"></div>
+  `;
+  $('#registerImportCommitBtn').addEventListener('click', () => commitRegisterImportPlan(plan));
+}
+async function commitRegisterImportPlan(plan){
+  const btn = $('#registerImportCommitBtn');
+  const status = $('#registerImportStatus');
+  const { newLeadRecords, existingLeadUpdates } = plan;
+  if(!confirm(`This writes ${newLeadRecords.length} new leads and updates ${existingLeadUpdates.length} existing leads. Every field stays individually editable afterward, but this can't be bulk-undone in one click. Continue?`)) return;
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  const stampedBy = currentUser || 'Teammate';
+  const patch = {};
+
+  newLeadRecords.forEach(rec => {
+    const key = String(rec['Sr.no']);
+    newLeads.push(rec);
+    editMeta[key] = { by: stampedBy, at: Date.now() };
+    patch[`newLeads.${key}`] = rec;
+    patch[`editMeta.${key}`] = fb ? { by: stampedBy, at: fb.serverTimestamp() } : { by: stampedBy, at: Date.now() };
+  });
+  existingLeadUpdates.forEach(u => {
+    if(!edits[u.srno]) edits[u.srno] = {};
+    edits[u.srno]['Enquiry Number'] = u.newEnquiryNumber;
+    edits[u.srno]['Inquiry Source'] = 'Automation Expo 2026';
+    editMeta[u.srno] = { by: stampedBy, at: Date.now() };
+    patch[`edits.${u.srno}.Enquiry Number`] = u.newEnquiryNumber;
+    patch[`edits.${u.srno}.Inquiry Source`] = 'Automation Expo 2026';
+    patch[`editMeta.${u.srno}`] = fb ? { by: stampedBy, at: fb.serverTimestamp() } : { by: stampedBy, at: Date.now() };
+  });
+
+  computeWorking();
+  saveLocalFallback();
+  renderPreservingFocus();
+
+  try{
+    const ok = (fb && boardRef) ? await writeToFirestore(patch) : false;
+    status.textContent = ok
+      ? `Done — imported ${newLeadRecords.length} leads and updated ${existingLeadUpdates.length} existing ones.`
+      : ((fb && boardRef) ? 'Saved locally — sync to the team failed, will retry.' : 'Saved locally — Firebase not configured.');
+    if(ok){
+      showToast(`Register import complete: ${newLeadRecords.length} new, ${existingLeadUpdates.length} updated.`, 'success');
+      // Logged as two aggregate entries, not one per lead -- 172+134 individual
+      // 'add-lead'/'edit-lead' entries would both flood the routine-log window
+      // (capped at 400) and fire that many separate Firestore writes on top of the
+      // batched one above. These action types aren't in ROUTINE_LOG_ACTIONS, so
+      // they're never auto-pruned, matching how rare/significant this operation is.
+      if(newLeadRecords.length) logActivity('import-leads', `Imported ${newLeadRecords.length} leads from the team's Enquiry Register (${plan.sourceRexrothCount} Rexroth + ${plan.sourceDobotCount} Dobot rows)`, {});
+      if(existingLeadUpdates.length) logActivity('bulk-renumber-leads', `Set Inquiry Source = "Automation Expo 2026" and renumbered ${existingLeadUpdates.length} existing leads to match the register's SI/<FY>/NNNN scheme`, {});
+    }
+  }catch(err){
+    status.textContent = 'Could not save: ' + err.message;
+  }
+  btn.disabled = false;
+  renderAll();
 }
 
 // ---- Autofill Enquiry Numbers: runs itself automatically (no button, no prompt) --
@@ -2626,12 +2914,17 @@ function autofillMissingEnquiryNumbers(){
   if(!missing.length) return;
   enquiryAutofillInFlight = true;
 
-  // Highest sequence number already used per FY prefix, so generated numbers
-  // continue on from real ones instead of colliding with them.
-  const maxSeqByFY = {};
+  // Highest sequence number already used per FY+block prefix, so generated numbers
+  // continue on from real ones (including the team's real register import) instead
+  // of colliding with them.
+  const maxSeqByKey = {}; // "fy|block" -> highest number in use
   workingLeads.forEach(r => {
-    const m = String(r['Enquiry Number'] || '').match(/^SYNC\/SI\/(\d{2}-\d{2})\/(\d+)$/);
-    if(m){ const fy = m[1], n = parseInt(m[2], 10); if(!maxSeqByFY[fy] || n > maxSeqByFY[fy]) maxSeqByFY[fy] = n; }
+    const m = String(r['Enquiry Number'] || '').match(/^SI\/(\d{4})\/([12])(\d+)$/);
+    if(m){
+      const key = `${m[1]}|${m[2] === '2' ? 'dobot' : 'rexroth'}`;
+      const n = parseInt(m[2] + m[3], 10);
+      if(!maxSeqByKey[key] || n > maxSeqByKey[key]) maxSeqByKey[key] = n;
+    }
   });
   // Oldest-received-first so numbers within a year still ascend roughly the way
   // they would have if entered at the time; undated ones sort last.
@@ -2644,15 +2937,18 @@ function autofillMissingEnquiryNumbers(){
   const stampedBy = currentUser || 'Teammate';
   missing.forEach(r => {
     const fy = fyCodeForDate(r['Received Date']);
-    const next = (maxSeqByFY[fy] || 0) + 1;
-    maxSeqByFY[fy] = next;
-    const enquiryNo = `SYNC/SI/${fy}/${String(next).padStart(6, '0')}`;
-    const key = String(r['Sr.no']);
-    if(!edits[key]) edits[key] = {};
-    edits[key]['Enquiry Number'] = enquiryNo;
-    editMeta[key] = { by: stampedBy, at: Date.now() };
-    patch[`edits.${key}.Enquiry Number`] = enquiryNo;
-    patch[`editMeta.${key}`] = fb ? { by: stampedBy, at: fb.serverTimestamp() } : { by: stampedBy, at: Date.now() };
+    const block = registerBlockFor(r['Product Interest']);
+    const key = `${fy}|${block}`;
+    const base = block === 'dobot' ? 2000 : 1000;
+    const next = (maxSeqByKey[key] || base) + 1;
+    maxSeqByKey[key] = next;
+    const enquiryNo = `SI/${fy}/${next}`;
+    const srKey = String(r['Sr.no']);
+    if(!edits[srKey]) edits[srKey] = {};
+    edits[srKey]['Enquiry Number'] = enquiryNo;
+    editMeta[srKey] = { by: stampedBy, at: Date.now() };
+    patch[`edits.${srKey}.Enquiry Number`] = enquiryNo;
+    patch[`editMeta.${srKey}`] = fb ? { by: stampedBy, at: fb.serverTimestamp() } : { by: stampedBy, at: Date.now() };
   });
   computeWorking();
   saveLocalFallback();
@@ -2719,7 +3015,18 @@ $('#addLeadBtn').addEventListener('click', () => {
   const receivedInput = $('#add-Received-Date');
   if(receivedInput) receivedInput.value = todayISO();
   const enquiryInput = $('#add-Enquiry-Number');
-  if(enquiryInput) enquiryInput.value = suggestNextEnquiryNumber();
+  const productSelect = $('#add-Product-Interest');
+  if(enquiryInput) enquiryInput.value = suggestNextEnquiryNumber(productSelect ? productSelect.value : '');
+  // The suggested number depends on Product Interest (Rexroth vs Dobot block) --
+  // re-suggest when that changes, but only if the field still holds an
+  // auto-suggested value the user hasn't already edited by hand.
+  if(productSelect && enquiryInput){
+    productSelect.addEventListener('change', () => {
+      const current = enquiryInput.value.trim();
+      const stillAuto = !current || /^SI\/\d{4}\/\d+$/.test(current);
+      if(stillAuto) enquiryInput.value = suggestNextEnquiryNumber(productSelect.value);
+    });
+  }
   // "Enquiry generated by" is auto-fetched from who's actually signed in (the user
   // registry), not typed — still changeable if someone's logging a lead for a teammate.
   const genByInput = $('#add-Lead-Generated-By');
@@ -3502,10 +3809,30 @@ async function renderSuperAdminPanel(){
       <div class="section-note" id="backfillSourceStatus" style="margin-top:10px;"></div>
     </div>`;
 
+  const registerImportSection = `
+    <div class="mgmt-section" style="border-color:var(--amber);">
+      <div class="mgmt-section-title">⚠ One-Time: Import Team Enquiry Register</div>
+      <div class="section-note" style="margin-bottom:14px;">
+        Imports the Rexroth + Dobot sheets from your team's real INQUIRY_REGISTER_FOLLOWUP xlsx as new
+        leads — each one keeps its <b>exact real Enquiry Number</b> (SI/&lt;FY&gt;/1NNN for Rexroth,
+        SI/&lt;FY&gt;/2NNN for Dobot) and its own recorded Inquiry Source, never regenerated. It also sets
+        Inquiry Source = "Automation Expo 2026" on every one of the leads already in the system before this
+        register (identified as the original base dataset, not anything added since), and reformats <i>their</i>
+        Enquiry Numbers to the same scheme, continuing on from the register's real numbers so nothing collides.
+        Nothing is written to Firestore until you review the preview below and confirm.
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+        <input type="file" id="registerImportFile" accept=".xlsx" style="max-width:320px;">
+        <button class="btn" id="registerImportParseBtn">Parse &amp; Preview</button>
+      </div>
+      <div id="registerImportPreview"></div>
+    </div>`;
+
   content.innerHTML = `
     ${migrationBanner}
     ${dropdownOptionsSection}
     ${leadSourceBackfillSection}
+    ${registerImportSection}
     <div class="mgmt-section">
       <div class="mgmt-section-title">Add a New User</div>
       <div class="section-note" style="margin-bottom:14px;">No password is ever typed or shared here — they get an email at the address you enter, to set their own password before their first sign-in.</div>
@@ -3781,6 +4108,26 @@ async function renderSuperAdminPanel(){
       status.textContent = 'Could not save: ' + err.message;
     }
     renderSuperAdminPanel();
+  });
+
+  const registerImportParseBtn = $('#registerImportParseBtn');
+  if(registerImportParseBtn) registerImportParseBtn.addEventListener('click', async () => {
+    const fileInput = $('#registerImportFile');
+    const preview = $('#registerImportPreview');
+    const file = fileInput.files && fileInput.files[0];
+    if(!file){ preview.innerHTML = `<div class="section-note" style="color:var(--red);">Choose a file first.</div>`; return; }
+    registerImportParseBtn.disabled = true;
+    const orig = registerImportParseBtn.textContent;
+    registerImportParseBtn.textContent = 'Parsing…';
+    preview.innerHTML = '';
+    try{
+      const plan = await buildRegisterImportPlan(file);
+      renderRegisterImportPreview(plan);
+    }catch(err){
+      preview.innerHTML = `<div class="section-note" style="color:var(--red);">Could not parse the file: ${escapeHtml(err.message)}</div>`;
+    }
+    registerImportParseBtn.disabled = false;
+    registerImportParseBtn.textContent = orig;
   });
 
 }
@@ -4461,6 +4808,7 @@ function activityActionLabel(action){
     'add-user': 'Added user', 'change-role': 'Changed role', 'change-scope': 'Changed scope',
     'enable-user': 'Enabled user', 'disable-user': 'Disabled user',
     'change-permission': 'Changed permission', 'change-view-filter': 'Changed region/view restriction',
+    'import-leads': 'Imported leads', 'bulk-renumber-leads': 'Bulk-renumbered leads',
   }[action] || action;
 }
 function renderActivityLogPanel(){
