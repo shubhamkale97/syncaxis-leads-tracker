@@ -1313,10 +1313,19 @@ function countryFilterOptions(){
   set.delete('India');
   return ['India', ...[...set].sort((a, b) => a.localeCompare(b))];
 }
-function viewFilterFieldOptions(key){
+// scopeCtx narrows State/City to only what actually exists WITHIN the currently-
+// checked Country (and, for City, the currently-checked State too) -- e.g. picking
+// India first means the State list only offers states that have at least one Indian
+// lead, so the two levels can never end up an impossible/non-existent combination.
+// Omit scopeCtx (or pass none checked at that level) for the full unscoped list.
+function viewFilterFieldOptions(key, scopeCtx){
   if(key === 'Country') return countryFilterOptions();
-  if(key === 'State') return uniqueSorted('State');
-  if(key === 'City') return uniqueSorted('City');
+  if(key === 'State' || key === 'City'){
+    let pool = workingLeads;
+    if(scopeCtx && scopeCtx.countries && scopeCtx.countries.length) pool = pool.filter(r => scopeCtx.countries.includes(r.Country));
+    if(key === 'City' && scopeCtx && scopeCtx.states && scopeCtx.states.length) pool = pool.filter(r => scopeCtx.states.includes(r.State));
+    return [...new Set(pool.map(r => r[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }
   if(key === 'Product Interest') return PRODUCT_OPTIONS;
   if(key === 'Application Category') return APP_CATS;
   if(key === 'Follow-Up Status') return STATUS_OPTIONS;
@@ -1420,8 +1429,21 @@ function computeWorking(){
   workingLeads = all;
   refreshLocationOptions();
 }
+// Geography matches on the MOST SPECIFIC level that's actually restricted (City >
+// State > Country), rather than requiring every checked level to independently match
+// the lead's own stored value. Restricting by City alone is then enough on its own --
+// it doesn't also silently require the lead's State field to be filled in and
+// spelled consistently, which is exactly what caused a real "0 leads visible" bug
+// (a City-restricted account seeing nothing because some leads have City set but
+// State left blank). Every other field (Product/Application/Status/Priority) still
+// combines as a plain AND, unaffected.
 function matchesViewFilter(r, vf){
-  return Object.entries(vf).every(([key, values]) => !values || !values.length || values.includes(r[key]));
+  const cityOn = vf.City && vf.City.length, stateOn = vf.State && vf.State.length, countryOn = vf.Country && vf.Country.length;
+  if(cityOn ? !vf.City.includes(r.City) : stateOn ? !vf.State.includes(r.State) : countryOn ? !vf.Country.includes(r.Country) : false) return false;
+  return Object.entries(vf).every(([key, values]) => {
+    if(key === 'City' || key === 'State' || key === 'Country') return true; // handled above
+    return !values || !values.length || values.includes(r[key]);
+  });
 }
 
 // ============ Persistence ============
@@ -3706,12 +3728,17 @@ $('#superAdminCloseBtn').addEventListener('click', () => $('#superAdminOverlay')
 // hand or leaving none checked (both mean "no restriction" once read back).
 function viewFilterBuilderHtml(idPrefix, current){
   current = current || {};
+  // The initial State/City lists are scoped by whatever Country/State this filter
+  // was already saved with, so reopening an existing filter starts already narrowed
+  // to the right country/state -- not the full worldwide list.
+  const scopeCtx = { countries: current.Country || [], states: current.State || [] };
   return VIEW_FILTER_FIELDS.map(f => {
-    const opts = viewFilterFieldOptions(f.key);
+    const opts = (f.key === 'State' || f.key === 'City') ? viewFilterFieldOptions(f.key, scopeCtx) : viewFilterFieldOptions(f.key);
     const selected = new Set(current[f.key] || []);
     const listId = `${idPrefix}-${slug(f.key)}`;
+    const hint = f.key === 'State' ? ' — narrows to the checked Country' : f.key === 'City' ? ' — narrows to the checked Country/State' : '';
     return `<div class="form-field">
-      <label>${f.label} (none checked = all)</label>
+      <label>${f.label} (none checked = all)${hint}</label>
       <div class="filter-select-all-row">
         <button type="button" class="filter-select-all-btn" data-target="${listId}">Select all</button>
         <button type="button" class="filter-clear-btn" data-target="${listId}">Clear</button>
@@ -3721,6 +3748,27 @@ function viewFilterBuilderHtml(idPrefix, current){
       </div>
     </div>`;
   }).join('');
+}
+// Live-narrows the State list whenever Country changes, and the City list whenever
+// Country or State changes, within ONE filter builder instance -- picking a country
+// (or narrowing further to a state) means the levels below it only ever offer values
+// that genuinely exist together, matching "first pick country, then state within it,
+// then city within that." Checked values that are no longer offered are dropped;
+// everything else stays checked across a rebuild.
+function wireGeoCascadeInFilterBuilder(idPrefix){
+  const countryList = document.getElementById(`${idPrefix}-Country`);
+  const stateList = document.getElementById(`${idPrefix}-State`);
+  const cityList = document.getElementById(`${idPrefix}-City`);
+  if(!countryList || !stateList || !cityList) return;
+  const checkedValues = list => [...list.querySelectorAll('input:checked')].map(cb => cb.value);
+  const rebuild = (list, options) => {
+    const keep = new Set(checkedValues(list).filter(v => options.includes(v)));
+    list.innerHTML = options.map((o, i) => `<label class="checkbox-list-item"><input type="checkbox" value="${escapeHtml(o)}" id="${list.id}-${i}" ${keep.has(o) ? 'checked' : ''}> ${escapeHtml(o)}</label>`).join('');
+  };
+  const refreshState = () => rebuild(stateList, viewFilterFieldOptions('State', { countries: checkedValues(countryList) }));
+  const refreshCity = () => rebuild(cityList, viewFilterFieldOptions('City', { countries: checkedValues(countryList), states: checkedValues(stateList) }));
+  countryList.addEventListener('change', () => { refreshState(); refreshCity(); });
+  stateList.addEventListener('change', refreshCity);
 }
 function wireViewFilterBuilderButtons(root){
   (root || document).querySelectorAll('.filter-select-all-btn').forEach(btn => {
@@ -3810,9 +3858,22 @@ function refreshViewFilterSelectOptions(){
   if(!overlay || !overlay.classList.contains('open')) return;
   VIEW_FILTER_FIELDS.forEach(f => {
     const suffix = '-' + slug(f.key);
-    const freshOptions = viewFilterFieldOptions(f.key);
     document.querySelectorAll('#superAdminContent .checkbox-list').forEach(list => {
       if(!list.id.endsWith(suffix)) return;
+      // State/City stay scoped to whatever Country/State is currently checked in
+      // THIS SAME builder instance -- a sync tick must not silently un-narrow a
+      // cascade the admin already set up. idPrefix is everything before the suffix.
+      let freshOptions;
+      if(f.key === 'State' || f.key === 'City'){
+        const idPrefix = list.id.slice(0, -suffix.length);
+        const countryList = document.getElementById(`${idPrefix}-Country`);
+        const stateList = document.getElementById(`${idPrefix}-State`);
+        const countries = countryList ? [...countryList.querySelectorAll('input:checked')].map(cb => cb.value) : [];
+        const states = stateList ? [...stateList.querySelectorAll('input:checked')].map(cb => cb.value) : [];
+        freshOptions = viewFilterFieldOptions(f.key, { countries, states });
+      } else {
+        freshOptions = viewFilterFieldOptions(f.key);
+      }
       const checkedNow = new Set([...list.querySelectorAll('input:checked')].map(cb => cb.value));
       list.innerHTML = freshOptions.map((o, i) => `<label class="checkbox-list-item"><input type="checkbox" value="${escapeHtml(o)}" id="${list.id}-${i}" ${checkedNow.has(o) ? 'checked' : ''}> ${escapeHtml(o)}</label>`).join('');
     });
@@ -4002,6 +4063,8 @@ async function renderSuperAdminPanel(){
   // still in scope via closure.
   const targetLabel = uid => { const u = users.find(x => x.uid === uid); return (u && (u.displayName || u.email)) || uid; };
   wireViewFilterBuilderButtons(content);
+  wireGeoCascadeInFilterBuilder('newUserFilter');
+  users.forEach(u => wireGeoCascadeInFilterBuilder('editFilter-' + u.uid));
 
   content.querySelectorAll('.role-select').forEach(sel => {
     sel.addEventListener('change', async () => {
