@@ -839,6 +839,20 @@
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-primary" id="authLoginSubmitBtn">SIGN IN</button>
     </div>
+    <!-- Monitoring transparency notice. Logging staff activity and IP addresses is
+         processing of personal data; telling people plainly that it happens, why, and
+         for how long is both the decent thing to do and a baseline expectation under
+         GDPR-style transparency rules for employee monitoring. Deliberately placed
+         BEFORE sign-in so it is seen before any activity is recorded. -->
+    <div class="section-note" style="margin-top:18px; padding-top:14px; border-top:1px solid var(--line); font-size:11px; line-height:1.6; color:var(--text-faint);">
+      <b style="color:var(--text-dim);">Activity monitoring notice.</b> For security and audit purposes this system records
+      the actions you take (leads and customers added, edited or deleted, notes, data exports and
+      permission changes), together with your name, the date and time, your IP address and the
+      approximate city it maps to. Only a Super Admin can view these records. They are used solely to
+      secure the system and investigate incidents — never for performance measurement. Routine entries
+      are kept for a limited period and then automatically deleted; security-relevant entries are kept
+      longer. You may ask your Super Admin what is held about you, or request its deletion.
+    </div>
   </div>
 </div>
 
@@ -948,6 +962,11 @@ document.querySelectorAll('.brand-logo').forEach(img => { img.src = LOGO_DATA_UR
 //          // customAppCategories/customInquirySources (superadmin-only in the UI). This is
 //          // enforced here too, not just hidden in the UI, since Firestore can't be
 //          // restricted to specific fields any other way.
+//          // NOTE: 'activityLog' is intentionally NO LONGER in this list. The audit log
+//          // moved to its own top-level collection (see match /activityLog below) so that
+//          // read access can actually be restricted to the superadmin -- while it lived on
+//          // this document, every teammate's client received it on every sync. It stays
+//          // listed only for the one-time migration, then should be removed entirely.
 //          function isLeadFieldsOnly() { return resource == null || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edits','newLeads','editMeta','noteLogs','customerMaster','customerIdCounter','activityLog','lastUpdatedBy','lastUpdatedAt']); }
 //          // A user can be delegated (via canManageOptions on their own /users doc) to add
 //          // Country/State/City/Application Category/Inquiry Source dropdown options on the
@@ -975,6 +994,43 @@ document.querySelectorAll('.brand-logo').forEach(img => { img.src = LOGO_DATA_UR
 //            allow read: if isSuperAdmin() || isLegacyManager() || isActive();
 //            allow write: if isSuperAdmin();
 //          }
+//          // ===== AUDIT LOG =====
+//          // The point of this block: make "Super Admin only" a REAL boundary rather
+//          // than a hidden button, and make the trail append-only so the people it
+//          // audits cannot rewrite or erase it.
+//          //   read   -- superadmin only. Nobody else's client ever receives it.
+//          //   create -- any active user (their own actions must be recordable), but
+//          //             the entry's uid MUST match the caller, so entries can't be
+//          //             forged in someone else's name, and `at` must be the SERVER
+//          //             timestamp so a wrong/spoofed client clock can't reorder history.
+//          //   update -- ONLY a superadmin, and ONLY to blank the identifying fields
+//          //             for a GDPR Art. 17 erasure request. The substance of the
+//          //             trail (action, label, at, snapshot) can never be rewritten by
+//          //             anyone, so redaction of personal data and immutability of the
+//          //             record itself coexist. "Was this deletion restored?" is
+//          //             derived from a later restore-* entry, never by rewriting.
+//          //   delete -- superadmin only, needed for the retention policy.
+//          // Honest limitation to state to an auditor: rules constrain what a client
+//          // may WRITE, they cannot compel it to write at all. A user could in
+//          // principle suppress their own entry by calling the SDK directly. Google
+//          // Cloud Audit Logs (Admin Activity / Data Access) are the independent,
+//          // outside-the-app record; cite those for evidential purposes.
+//          match /activityLog/{logId} {
+//            allow read: if isSuperAdmin();
+//            // Superadmin is exempt from the shape checks so the one-time migration
+//            // can copy historic entries (which predate the uid field and carry their
+//            // original timestamps) into this collection. That exemption costs nothing
+//            // in real terms: a superadmin can already delete entries, so they are the
+//            // root of trust either way. State that plainly to an auditor rather than
+//            // implying the log is tamper-proof against its own administrator.
+//            allow create: if isSuperAdmin() || (isActive()
+//                          && request.resource.data.uid == request.auth.uid
+//                          && request.resource.data.at == request.time);
+//            allow update: if isSuperAdmin()
+//                          && request.resource.data.diff(resource.data).affectedKeys()
+//                               .hasOnly(['by','byEmail','uid','ip','location','erasedAt']);
+//            allow delete: if isSuperAdmin();
+//          }
 //        }
 //      }
 // 6. Deploy this file (e.g. via GitHub Pages) and share the ONE link with your
@@ -997,6 +1053,14 @@ const BOARD_COLLECTION = 'exhibitionDashboards';
 const BOARD_DOC = 'sharedLeadBoard';
 const USERS_COLLECTION = 'users'; // full user records — readable only by superadmin/legacy-manager or your own doc
 const TEAM_DIRECTORY_COLLECTION = 'teamDirectory'; // names-only, readable by any active user (for dropdowns)
+// The audit log lives in its OWN collection, one document per entry -- NOT as a field
+// on the shared board doc where it used to sit. Firestore rules can't restrict reads
+// to part of a document, so while it lived on the board doc every signed-in teammate's
+// client received it on every sync and could read (or wipe) it via devtools. As its
+// own collection it gets: read = Super Admin only, create = any active user, and
+// update/delete = Super Admin only -- a real boundary, and append-only for everyone
+// else. It also lifts the log out of the board doc's 1MB ceiling.
+const ACTIVITY_LOG_COLLECTION = 'activityLog';
 const AUTOSAVE_INTERVAL_MS = 15000; // heartbeat autosave while actively typing
 
 // ============ Access control ============
@@ -1362,6 +1426,11 @@ async function loadFirebase(){
            collection: fs.collection, getDocs: fs.getDocs, runTransaction: fs.runTransaction,
            onSnapshot: fs.onSnapshot, deleteField: fs.deleteField, serverTimestamp: fs.serverTimestamp,
            arrayUnion: fs.arrayUnion, arrayRemove: fs.arrayRemove,
+           // Needed by the audit log now that it lives in its own collection rather
+           // than as a field on the shared board document: querying/ordering/limiting
+           // it, and deleting individual entries for retention + erasure requests.
+           query: fs.query, orderBy: fs.orderBy, limit: fs.limit, where: fs.where,
+           deleteDoc: fs.deleteDoc, writeBatch: fs.writeBatch, Timestamp: fs.Timestamp,
            signInWithEmailAndPassword: authMod.signInWithEmailAndPassword,
            signOut: authMod.signOut, onAuthStateChanged: authMod.onAuthStateChanged,
            createUserWithEmailAndPassword: authMod.createUserWithEmailAndPassword,
@@ -1388,7 +1457,8 @@ async function ensureBoardDocExists(){
   try{
     const existing = await fb.getDoc(boardRef);
     if(!existing.exists()){
-      await fb.setDoc(boardRef, { edits:{}, newLeads:{}, editMeta:{}, noteLogs:{}, customerMaster:{}, activityLog:{} });
+      // No activityLog field any more -- the audit log lives in its own collection.
+      await fb.setDoc(boardRef, { edits:{}, newLeads:{}, editMeta:{}, noteLogs:{}, customerMaster:{} });
     }
   }catch(err){ console.error('Could not verify board doc exists:', err); }
 }
@@ -1816,10 +1886,11 @@ function startRealtimeSync(){
       noteLogs[k] = (arr || []).map(e => ({ ...e, at: e && e.at && e.at.toMillis ? e.at.toMillis() : (e && e.at) || null }));
     });
     customerMaster = data.customerMaster || {};
-    activityLog = {};
-    Object.entries(data.activityLog || {}).forEach(([k, v]) => {
-      activityLog[k] = { ...v, at: v && v.at && v.at.toMillis ? v.at.toMillis() : (v && v.at) || null };
-    });
+    // activityLog is deliberately NOT hydrated here any more. It lives in its own
+    // collection that only a Super Admin can read, so it must not ride along on the
+    // board-document snapshot that every signed-in teammate receives -- that was the
+    // whole reason the old Super-Admin-only restriction was cosmetic rather than real.
+    // The panel loads it on demand instead (see loadActivityLogFromCollection).
     computeWorking();
     saveLocalFallback();
     const atMillis = data.lastUpdatedAt && data.lastUpdatedAt.toMillis ? data.lastUpdatedAt.toMillis() : null;
@@ -1832,7 +1903,9 @@ function startRealtimeSync(){
       renderCustomerMasterPanel();
     }
     if($('#activityLogOverlay') && $('#activityLogOverlay').classList.contains('open')){
-      renderActivityLogPanel();
+      // Re-query the collection rather than re-render stale in-memory state, since
+      // the board snapshot no longer carries the log.
+      loadActivityLogFromCollection().then(() => renderActivityLogPanel());
     }
     refreshViewFilterSelectOptions();
     hasSyncedOnce = true;
@@ -3587,6 +3660,11 @@ async function handleAuthChange(user){
     realtimeSyncStarted = true;
     startRealtimeSync();
   }
+  // Resolve IP/approximate location BEFORE the sign-in entry is written, so that
+  // entry carries the context too rather than being the one blind spot. Awaited
+  // deliberately: a sign-in is exactly the event where "from where?" matters most.
+  await captureSessionContext();
+  logActivity('sign-in', `${resolved.displayName || user.email} signed in${sessionLocationLabel() ? ' from ' + sessionLocationLabel() : ''}`, {});
 }
 
 function showAuthGate(){
@@ -3964,9 +4042,51 @@ async function renderSuperAdminPanel(){
       <div id="registerImportPreview"></div>
     </div>`;
 
+  const dataGovernanceSection = `
+    <div class="mgmt-section">
+      <div class="mgmt-section-title">🔐 Data Governance &amp; Audit</div>
+      <div class="section-note" style="margin-bottom:14px;">
+        Tools an IT auditor will ask about. The audit log now lives in its own <code>activityLog</code>
+        collection, readable only by a Super Admin and append-only for everyone else — enforced by
+        Firestore security rules, not just hidden in this UI. Routine entries are auto-deleted after
+        ${ROUTINE_LOG_RETENTION_DAYS} days (GDPR Art. 5(1)(e) storage limitation).
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;"><b>One-time: migrate the old audit log</b></div>
+        <div class="section-note" style="margin-bottom:8px;">Copies any entries still stored on the old shared board document into the new collection, then clears them from the board so they stop being visible to every teammate's browser. Safe to run more than once.</div>
+        <button class="btn" id="migrateActivityLogBtn">Migrate Old Audit Log Entries</button>
+        <div class="section-note" id="migrateActivityLogStatus" style="margin-top:8px;"></div>
+      </div>
+
+      <div style="margin-bottom:16px; padding-top:14px; border-top:1px solid var(--line);">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;"><b>Subject access request (GDPR Art. 15)</b></div>
+        <div class="section-note" style="margin-bottom:8px;">Downloads everything this system holds about one person — their audit entries, the leads they generated or were assigned, and the notes they wrote — as a JSON file you can hand to them.</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="dsrPersonInput" placeholder="Their name as it appears in the app" style="max-width:280px;">
+          <button class="btn" id="dsrExportBtn">Export Their Data</button>
+          <button class="btn" id="dsrEraseBtn" style="border-color:var(--red); color:var(--red-fg);">Erase / Anonymise</button>
+        </div>
+        <div class="section-note" id="dsrStatus" style="margin-top:8px;"></div>
+        <div class="section-note" style="margin-top:8px; font-size:10.5px;">
+          Erase replaces their name, email, IP and location in audit entries with "[erased]", keeping the entries themselves
+          so the trail stays complete. Note GDPR Art. 17(3)(e) — you may lawfully retain records needed to establish or
+          defend legal claims; erasure is not automatically absolute. The erasure itself is logged.
+        </div>
+      </div>
+
+      <div style="padding-top:14px; border-top:1px solid var(--line);">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;"><b>Retention</b></div>
+        <div class="section-note" style="margin-bottom:8px;">Runs the retention rule now instead of waiting for it to trigger on the next logged action.</div>
+        <button class="btn" id="purgeLogBtn">Apply Retention Policy Now</button>
+        <div class="section-note" id="purgeLogStatus" style="margin-top:8px;"></div>
+      </div>
+    </div>`;
+
   content.innerHTML = `
     ${migrationBanner}
     ${dropdownOptionsSection}
+    ${dataGovernanceSection}
     ${leadSourceBackfillSection}
     ${registerImportSection}
     <div class="mgmt-section">
@@ -4282,6 +4402,99 @@ async function renderSuperAdminPanel(){
     renderSuperAdminPanel();
   });
 
+  const migrateLogBtn = $('#migrateActivityLogBtn');
+  if(migrateLogBtn) migrateLogBtn.addEventListener('click', async () => {
+    const status = $('#migrateActivityLogStatus');
+    migrateLogBtn.disabled = true;
+    status.textContent = 'Reading old entries…';
+    try{
+      const snap = await fb.getDoc(boardRef);
+      const legacy = (snap.exists() && (snap.data() || {}).activityLog) || {};
+      const ids = Object.keys(legacy);
+      if(!ids.length){ status.textContent = 'Nothing to migrate — the old board document has no audit entries.'; migrateLogBtn.disabled = false; return; }
+      if(!confirm(`Copy ${ids.length} audit entr${ids.length===1?'y':'ies'} into the new collection, then clear them from the shared board document? Safe to run more than once.`)){ migrateLogBtn.disabled = false; status.textContent=''; return; }
+      status.textContent = `Copying ${ids.length}…`;
+      // Copy first, clear second -- if the copy fails partway, nothing is lost.
+      for(const id of ids){
+        const v = legacy[id] || {};
+        await fb.setDoc(fb.doc(fb.db, ACTIVITY_LOG_COLLECTION, id), v);
+      }
+      await writeToFirestore({ activityLog: fb.deleteField() });
+      await logActivity('migrate-activity-log', `Migrated ${ids.length} audit entr${ids.length===1?'y':'ies'} out of the shared board document into the protected collection`, { count: ids.length });
+      status.textContent = `Done — ${ids.length} entr${ids.length===1?'y':'ies'} moved. They're no longer readable by non-Super-Admins.`;
+    }catch(err){
+      status.textContent = 'Migration failed: ' + err.message;
+    }
+    migrateLogBtn.disabled = false;
+  });
+
+  const dsrExportBtn = $('#dsrExportBtn');
+  if(dsrExportBtn) dsrExportBtn.addEventListener('click', async () => {
+    const status = $('#dsrStatus');
+    const person = $('#dsrPersonInput').value.trim();
+    if(!person){ status.textContent = 'Enter the person\'s name first.'; return; }
+    dsrExportBtn.disabled = true;
+    status.textContent = 'Gathering…';
+    try{
+      const bundle = await buildPersonDataBundle(person);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type:'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `subject-access-${slug(person)}-${todayISO()}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      status.textContent = `Exported ${bundle.summary.auditEntries} audit entries, ${bundle.summary.leads} leads, ${bundle.summary.notes} notes.`;
+      logActivity('export-data', `Subject access export for "${person}"`, { kind:'dsr', subject: person });
+    }catch(err){ status.textContent = 'Export failed: ' + err.message; }
+    dsrExportBtn.disabled = false;
+  });
+
+  const dsrEraseBtn = $('#dsrEraseBtn');
+  if(dsrEraseBtn) dsrEraseBtn.addEventListener('click', async () => {
+    const status = $('#dsrStatus');
+    const person = $('#dsrPersonInput').value.trim();
+    if(!person){ status.textContent = 'Enter the person\'s name first.'; return; }
+    if(!confirm(`Replace "${person}"'s name, email, IP and location with "[erased]" across all audit entries?\n\nThe entries themselves are kept so the audit trail stays complete — only the identifying fields are removed. This cannot be undone.`)) return;
+    dsrEraseBtn.disabled = true;
+    status.textContent = 'Erasing…';
+    try{
+      await loadActivityLogFromCollection();
+      const target = person.toLowerCase();
+      const hits = Object.entries(activityLog).filter(([, e]) =>
+        (e.by || '').toLowerCase() === target || (e.byEmail || '').toLowerCase() === target);
+      for(const [id] of hits){
+        // updateDoc with ONLY the identifying fields -- deliberately not setDoc with
+        // the whole object. Two reasons: the security rule permits exactly these keys
+        // and would reject anything wider, and the in-memory copy has `at` converted
+        // from a Firestore Timestamp to a number, so writing it back would corrupt the
+        // server timestamp the whole audit ordering depends on.
+        await fb.updateDoc(fb.doc(fb.db, ACTIVITY_LOG_COLLECTION, id),
+          { by:'[erased]', byEmail:'[erased]', uid:'', ip:'', location:'', erasedAt: fb.serverTimestamp() });
+      }
+      await logActivity('erase-person-data', `Erased identifying fields from ${hits.length} audit entr${hits.length===1?'y':'ies'} for "${person}" (GDPR Art. 17 request)`, { count: hits.length });
+      await loadActivityLogFromCollection();
+      status.textContent = `Done — ${hits.length} entr${hits.length===1?'y':'ies'} anonymised. Their name may still appear in lead records ("Lead Generated By"); change those in the leads table if required.`;
+    }catch(err){ status.textContent = 'Erase failed: ' + err.message; }
+    dsrEraseBtn.disabled = false;
+  });
+
+  const purgeBtn = $('#purgeLogBtn');
+  if(purgeBtn) purgeBtn.addEventListener('click', async () => {
+    const status = $('#purgeLogStatus');
+    purgeBtn.disabled = true;
+    status.textContent = 'Applying retention policy…';
+    try{
+      await loadActivityLogFromCollection();
+      const before = Object.keys(activityLog).length;
+      await pruneRoutineActivityLog();
+      const after = Object.keys(activityLog).length;
+      const removed = before - after;
+      if(removed > 0) await logActivity('purge-log', `Retention policy removed ${removed} audit entr${removed===1?'y':'ies'} older than ${ROUTINE_LOG_RETENTION_DAYS} days or beyond the ${ROUTINE_LOG_CAP}-entry window`, { count: removed });
+      status.textContent = removed > 0 ? `Done — removed ${removed} entr${removed===1?'y':'ies'}.` : 'Nothing to remove — everything is within the retention policy.';
+    }catch(err){ status.textContent = 'Purge failed: ' + err.message; }
+    purgeBtn.disabled = false;
+  });
+
   const registerImportParseBtn = $('#registerImportParseBtn');
   if(registerImportParseBtn) registerImportParseBtn.addEventListener('click', async () => {
     const fileInput = $('#registerImportFile');
@@ -4402,16 +4615,28 @@ function newLogId(){ return 'log_' + Date.now().toString(36) + '_' + Math.random
 // same as the rest of this app's writes — logging failing shouldn't block the actual
 // action a user was trying to do.
 async function logActivity(action, label, extra){
-  if(!fb || !boardRef) return;
+  if(!fb || !fb.db) return;
   const id = newLogId();
   const entry = Object.assign({
-    at: fb.serverTimestamp(), by: currentUser || 'Teammate', byEmail: currentUserEmail || '',
+    // Firestore's SERVER timestamp, never the client clock -- a client clock can be
+    // wrong or deliberately set, and an audit trail ordered by an attacker-controlled
+    // time is worthless (ISO/IEC 27001:2022 A.8.17 Clock synchronization).
+    at: fb.serverTimestamp(),
+    by: currentUser || 'Teammate', byEmail: currentUserEmail || '',
+    // uid is the only actor field a security rule can actually verify against
+    // request.auth.uid; `by`/`byEmail` are display conveniences taken from client
+    // memory and must not be treated as proof of identity on their own.
+    uid: (fb.auth && fb.auth.currentUser && fb.auth.currentUser.uid) || '',
     action, label,
+    ip: sessionContext.ip || '', location: sessionLocationLabel(), geoSource: sessionContext.geoSource || '',
   }, extra || {});
-  try{ await writeToFirestore({ [`activityLog.${id}`]: entry }); }
-  catch(err){ console.error('Could not write activity log entry:', err); }
-  // Reflect locally right away — same reason every other write in this app does this —
-  // rather than waiting on the realtime listener's round-trip to show it in the panel.
+  try{
+    // One document per entry in its own collection. Rules make this create-only for
+    // non-superadmins, so a user cannot rewrite or erase their own trail.
+    await fb.setDoc(fb.doc(fb.db, ACTIVITY_LOG_COLLECTION, id), entry);
+  }catch(err){ console.error('Could not write activity log entry:', err); }
+  // Mirror locally so the Super Admin panel reflects it immediately, exactly as
+  // before -- the panel no longer gets these via the board-document sync.
   activityLog[id] = Object.assign({}, entry, { at: Date.now() });
   pruneRoutineActivityLog();
 }
@@ -4437,22 +4662,86 @@ const NEVER_PRUNE_LOG_ACTIONS = new Set([
   'change-permission', 'change-view-filter', 'reset-password',
   'import-leads', 'bulk-renumber-leads', 'migrate-seed-data',
 ]);
+// Retention window in days for prunable entries, on top of the count cap. GDPR
+// Art. 5(1)(e) storage limitation: personal data (these entries contain names, emails
+// and IPs) must not be kept longer than necessary for the purpose. The count cap
+// bounds the document store; the age cap bounds how long an individual's activity
+// is retained. Deliberately a named constant so the retention period is a stated,
+// reviewable decision rather than an accident of implementation.
+const ROUTINE_LOG_RETENTION_DAYS = 180;
+// Only a Super Admin can delete audit entries (the rules enforce this), so pruning
+// silently no-ops for everyone else rather than spraying permission errors into
+// their console on every action they take.
 async function pruneRoutineActivityLog(){
+  if(!isSuperAdmin() || !fb || !fb.db) return;
+  const cutoff = Date.now() - (ROUTINE_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const routine = Object.entries(activityLog)
     .filter(([, e]) => !NEVER_PRUNE_LOG_ACTIONS.has(e.action))
     .sort((a, b) => (b[1].at || 0) - (a[1].at || 0)); // newest first
-  if(routine.length <= ROUTINE_LOG_CAP) return;
-  const toRemove = routine.slice(ROUTINE_LOG_CAP);
-  const patch = {};
-  toRemove.forEach(([id]) => {
-    if(fb) patch[`activityLog.${id}`] = fb.deleteField();
-    delete activityLog[id];
-  });
-  if(fb && boardRef){
-    try{ await writeToFirestore(patch); }
-    catch(err){ console.error('Could not prune old activity log entries:', err); }
-  }
+  // Over the count cap, OR older than the retention window -- whichever bites first.
+  const toRemove = routine.filter(([, e], i) => i >= ROUTINE_LOG_CAP || (e.at && e.at < cutoff));
+  if(!toRemove.length) return;
+  try{
+    await Promise.all(toRemove.map(async ([id]) => {
+      await fb.deleteDoc(fb.doc(fb.db, ACTIVITY_LOG_COLLECTION, id));
+      delete activityLog[id];
+    }));
+  }catch(err){ console.error('Could not prune old activity log entries:', err); }
 }
+// ============ Session context: IP + approximate location ============
+// IMPORTANT, and stated plainly wherever this is surfaced: this is CLIENT-REPORTED.
+// The browser asks a third-party service what its own public IP is and writes the
+// answer into the log. That is useful operational context ("Sohail signed in from
+// Pune") but it is NOT tamper-proof evidence -- a technical user could send a false
+// value, because there is no server of ours in the path to observe the real source
+// IP. Capturing it independently would need a server-side function (Firebase Cloud
+// Functions on the paid plan) or Google Cloud Audit Logs, which record connections
+// outside this app's control. Do not let anyone present this field to an auditor as
+// independently verified.
+//
+// Privacy: an IP address is personal data (GDPR Recital 30; CJEU C-582/14 Breyer),
+// and calling the lookup necessarily discloses each user's IP to the provider. Users
+// are told this on the sign-in screen before any of it is recorded.
+//
+// Fetched ONCE per session and reused, rather than per action: it barely changes
+// within a session, and re-querying on every keystroke-triggered log entry would be
+// both wasteful and a much larger disclosure to the third party.
+let sessionContext = { ip: '', city: '', region: '', country: '', geoSource: '' };
+let sessionContextPromise = null;
+async function captureSessionContext(){
+  if(sessionContextPromise) return sessionContextPromise;
+  sessionContextPromise = (async () => {
+    // Primary: ipwho.is -- keyless, CORS-enabled, 1000/day free tier. `fields=` trims
+    // the response to only what we store, so we don't pull back coordinates/ISP we
+    // have no need for (data minimisation).
+    try{
+      const res = await fetch('https://ipwho.is/?fields=ip,city,region,country,country_code,success');
+      const j = await res.json();
+      // ipwho.is returns HTTP 200 with success:false on failure, so res.ok alone is
+      // not a sufficient check.
+      if(j && j.success){
+        sessionContext = { ip: j.ip || '', city: j.city || '', region: j.region || '', country: j.country || '', geoSource: 'ipwho.is' };
+        return sessionContext;
+      }
+    }catch(err){ /* fall through to the backup */ }
+    // Fallback: GeoJS. Never throttled in testing, but city/region keys are OMITTED
+    // entirely (not blank) when it only has country-level data -- hence the ?? ''.
+    try{
+      const j = await (await fetch('https://get.geojs.io/v1/ip/geo.json')).json();
+      sessionContext = { ip: j.ip || '', city: j.city ?? '', region: j.region ?? '', country: j.country || '', geoSource: 'geojs.io' };
+      return sessionContext;
+    }catch(err){ /* fall through */ }
+    // Both geo services unreachable -- logging must still work, just without context.
+    sessionContext = { ip: '', city: '', region: '', country: '', geoSource: 'unavailable' };
+    return sessionContext;
+  })();
+  return sessionContextPromise;
+}
+function sessionLocationLabel(){
+  const parts = [sessionContext.city, sessionContext.region, sessionContext.country].filter(Boolean);
+  return parts.length ? parts.join(', ') : '';
+}
+
 // Human-readable identifier for a lead in a log label -- company name where there is
 // one, falling back to the Sr.no so an entry is never just an opaque number.
 function leadLabelFor(srno){
@@ -5036,16 +5325,89 @@ function activityActionLabel(action){
     'import-leads': 'Imported leads', 'bulk-renumber-leads': 'Bulk-renumbered leads',
     'edit-customer': 'Edited customer', 'edit-contact': 'Edited contact',
     'add-note': 'Added follow-up note', 'delete-note': 'Deleted follow-up note',
-    'restore-note': 'Restored follow-up note',
+    'restore-note': 'Restored follow-up note', 'sign-in': 'Signed in',
+    'migrate-activity-log': 'Migrated audit log', 'purge-log': 'Purged audit entries',
+    'erase-person-data': 'Erased personal data',
     'add-option': 'Added dropdown option', 'reset-password': 'Sent password reset',
     'export-data': 'Exported data', 'autofill-enquiry-numbers': 'Auto-filled Enquiry Numbers',
     'bulk-set-source': 'Bulk-set Inquiry Source', 'migrate-seed-data': 'Migrated seed data',
   }[action] || action;
 }
+// Loads the audit log from its own collection. Super Admin only -- for anyone else
+// the Firestore rules reject the read outright, which is the point: this is now a
+// real server-enforced boundary rather than a hidden button. Capped at a generous
+// limit so a very large log can't lock up the panel; the count is surfaced in the UI
+// so a truncated view is never silently presented as complete.
+const ACTIVITY_LOG_PAGE_SIZE = 1000;
+let activityLogTruncated = false;
+async function loadActivityLogFromCollection(){
+  if(!isSuperAdmin() || !fb || !fb.db) return;
+  try{
+    const q = fb.query(
+      fb.collection(fb.db, ACTIVITY_LOG_COLLECTION),
+      fb.orderBy('at', 'desc'),
+      fb.limit(ACTIVITY_LOG_PAGE_SIZE)
+    );
+    const snap = await fb.getDocs(q);
+    const next = {};
+    snap.forEach(d => {
+      const v = d.data() || {};
+      next[d.id] = { ...v, at: v.at && v.at.toMillis ? v.at.toMillis() : (v.at || null) };
+    });
+    activityLog = next;
+    activityLogTruncated = snap.size >= ACTIVITY_LOG_PAGE_SIZE;
+  }catch(err){
+    console.error('Could not load the activity log:', err);
+    throw err;
+  }
+}
+// Assembles everything this system holds about one named person, for a GDPR Art. 15
+// subject access request. Deliberately covers all three places a teammate's personal
+// data actually lives -- the audit log, lead attribution fields, and note authorship --
+// rather than only the obvious one, since an incomplete SAR response is itself a
+// compliance failure.
+async function buildPersonDataBundle(person){
+  const target = person.trim().toLowerCase();
+  await loadActivityLogFromCollection();
+  const auditEntries = Object.entries(activityLog)
+    .filter(([, e]) => (e.by || '').toLowerCase() === target || (e.byEmail || '').toLowerCase() === target)
+    .map(([id, e]) => Object.assign({ logId: id }, e, { at: e.at ? new Date(e.at).toISOString() : null }))
+    .sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+  const leads = workingLeads
+    .filter(r => (r['Lead Generated By'] || '').toLowerCase() === target
+              || (r['Enquiry Assigned To'] || '').toLowerCase() === target
+              || (r['Attended By'] || '').toLowerCase() === target)
+    .map(r => ({ 'Sr.no': r['Sr.no'], 'Enquiry Number': r['Enquiry Number'], 'Company Name': r['Company Name'],
+                 'Lead Generated By': r['Lead Generated By'], 'Enquiry Assigned To': r['Enquiry Assigned To'], 'Attended By': r['Attended By'] }));
+  const notes = [];
+  Object.entries(noteLogs).forEach(([srno, arr]) => {
+    (arr || []).forEach(n => {
+      if((n.by || '').toLowerCase() === target){
+        notes.push({ srno, date: n.date, text: n.text, by: n.by, at: n.at ? new Date(n.at).toISOString() : null });
+      }
+    });
+  });
+  return {
+    subject: person,
+    generatedAt: new Date().toISOString(),
+    generatedBy: currentUser || '',
+    note: 'Produced in response to a data subject access request (GDPR Art. 15). Covers audit-log entries attributed to this person, lead records where they are named, and follow-up notes they authored.',
+    summary: { auditEntries: auditEntries.length, leads: leads.length, notes: notes.length },
+    auditEntries, leads, notes,
+  };
+}
 // Held at module scope, not inside renderActivityLogPanel, so a live sync re-render
 // (the panel re-renders whenever fresh data arrives) doesn't wipe out the filters the
 // Super Admin is currently reviewing with.
 let activityLogFilters = { user: '', action: '', text: '' };
+// Derived, never stored on the original entry -- see the restore handler. An entry
+// counts as restored if any later entry references it via restoredLogId. Also honours
+// a legacy `restored: true` flag so entries written before the append-only migration
+// still display correctly.
+function wasLogEntryRestored(logId, entry){
+  if(entry && entry.restored === true) return true;
+  return Object.values(activityLog).some(e => e && e.restoredLogId === logId);
+}
 function renderActivityLogPanel(){
   const content = $('#activityLogContent');
   if(!content) return;
@@ -5057,12 +5419,16 @@ function renderActivityLogPanel(){
   const entries = allEntries.filter(([, e]) =>
     (!fUser || (e.by || '') === fUser) &&
     (!fAction || e.action === fAction) &&
-    (!fText || `${e.label || ''} ${activityActionLabel(e.action)} ${e.by || ''} ${e.byEmail || ''}`.toLowerCase().includes(fText))
+    (!fText || `${e.label || ''} ${activityActionLabel(e.action)} ${e.by || ''} ${e.byEmail || ''} ${e.ip || ''} ${e.location || ''}`.toLowerCase().includes(fText))
   );
   const knownUsers = [...new Set(allEntries.map(([, e]) => e.by).filter(Boolean))].sort((a,b) => a.localeCompare(b));
   const knownActions = [...new Set(allEntries.map(([, e]) => e.action).filter(Boolean))].sort((a,b) => activityActionLabel(a).localeCompare(activityActionLabel(b)));
-  const cols = 'grid-template-columns: 150px 1fr 120px 100px;';
-  let html = `<div class="section-note" style="margin-bottom:12px;">Every teammate's activity — leads added/edited, follow-up notes, Customer Master changes, dropdown options, data exports, and Super Admin user/permission changes — with who did it and when. A deletion can be restored here from exactly the data it had right before it was removed. Routine activity is kept as a rolling window of the last ${ROUTINE_LOG_CAP} entries so the shared data file can't grow without bound; deletions, restores, password resets and permission changes are never pruned.</div>
+  const cols = 'grid-template-columns: 145px 1fr 115px 150px 90px;';
+  let html = `<div class="section-note" style="margin-bottom:12px;">Every teammate's activity — leads added/edited, follow-up notes, Customer Master changes, dropdown options, data exports, and Super Admin user/permission changes — with who did it, when, and from where. A deletion can be restored here from exactly the data it had right before it was removed. Routine activity is kept for ${ROUTINE_LOG_RETENTION_DAYS} days (or the most recent ${ROUTINE_LOG_CAP} entries, whichever is reached first) and then automatically deleted; deletions, restores, password resets and permission changes are never pruned.</div>
+    <div class="section-note" style="margin-bottom:12px; padding:8px 10px; background:var(--panel-2); border-radius:7px; font-size:11px; line-height:1.6;">
+      <b>Note on IP &amp; location:</b> these are reported by the user's own browser via a third-party lookup, not observed by a server under your control. They are reliable operational context, but they are <b>not tamper-proof evidence</b> — a technical user could send a false value. For evidential-grade source records, use Google Cloud Audit Logs in the Firebase console, which are recorded outside this application.
+    </div>
+    ${activityLogTruncated ? `<div class="section-note" style="margin-bottom:10px; color:var(--amber-fg);">⚠ Showing only the most recent ${ACTIVITY_LOG_PAGE_SIZE} entries — older entries exist but aren't loaded here.</div>` : ''}
     <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
       <div class="form-field"><label>Who</label><select id="activityFilterUser"><option value="">Everyone</option>${knownUsers.map(u => `<option value="${escapeHtml(u)}" ${fUser === u ? 'selected' : ''}>${escapeHtml(u)}</option>`).join('')}</select></div>
       <div class="form-field"><label>Action</label><select id="activityFilterAction"><option value="">All actions</option>${knownActions.map(a => `<option value="${escapeHtml(a)}" ${fAction === a ? 'selected' : ''}>${escapeHtml(activityActionLabel(a))}</option>`).join('')}</select></div>
@@ -5073,15 +5439,17 @@ function renderActivityLogPanel(){
     html += `<div class="section-note">${allEntries.length ? 'No entries match these filters.' : 'Nothing logged yet.'}</div>`;
   } else {
     html += `<div class="customer-list">
-      <div class="customer-list-row head" style="${cols}"><div>When</div><div>What</div><div>By</div><div></div></div>
+      <div class="customer-list-row head" style="${cols}"><div>When</div><div>What</div><div>By</div><div>From (self-reported)</div><div></div></div>
       ${entries.map(([id, e]) => {
         const when = e.at ? new Date(e.at).toLocaleString() : '—';
-        const canRestore = e.action.startsWith('delete-') && !e.restored;
+        const isRestored = wasLogEntryRestored(id, e);
+        const canRestore = e.action.startsWith('delete-') && !isRestored && !!e.snapshot;
         return `
         <div class="customer-list-row" style="${cols}">
           <div style="color:var(--text-faint); font-size:11px;">${escapeHtml(when)}</div>
-          <div>${activityActionLabel(e.action)}: <b>${escapeHtml(e.label || '')}</b>${e.restored ? ' <span style="color:var(--green); font-size:11px;">(restored)</span>' : ''}</div>
+          <div>${activityActionLabel(e.action)}: <b>${escapeHtml(e.label || '')}</b>${isRestored ? ' <span style="color:var(--green); font-size:11px;">(restored)</span>' : ''}</div>
           <div style="color:var(--text-faint); font-size:11px;" title="${escapeHtml(e.byEmail || '')}">${escapeHtml(e.by || '')}</div>
+          <div style="color:var(--text-faint); font-size:10.5px; font-family:var(--font-mono);" title="${escapeHtml(e.geoSource ? 'Source: ' + e.geoSource + ' (client-reported)' : '')}">${escapeHtml(e.location || '')}${e.ip ? `<br>${escapeHtml(e.ip)}` : ''}${!e.location && !e.ip ? '—' : ''}</div>
           <div>${canRestore ? `<button class="btn btn-small restore-log-btn" data-log="${id}">↩ Restore</button>` : ''}</div>
         </div>`;
       }).join('')}
@@ -5114,7 +5482,7 @@ function renderActivityLogPanel(){
       if(entry.action === 'delete-customer'){
         await writeToFirestore({ [`customerMaster.${entry.custId}`]: entry.snapshot });
         customerMaster[entry.custId] = entry.snapshot;
-        await logActivity('restore-customer', entry.label, { custId: entry.custId });
+        await logActivity('restore-customer', entry.label, { custId: entry.custId, restoredLogId: logId });
       } else if(entry.action === 'delete-contact'){
         if(!customerMaster[entry.custId]){
           showToast("Can't restore — the customer this contact belonged to no longer exists. Restore or re-add that customer first.", 'error');
@@ -5124,17 +5492,20 @@ function renderActivityLogPanel(){
         await writeToFirestore({ [`customerMaster.${entry.custId}.contacts.${entry.contactId}`]: entry.snapshot });
         if(!customerMaster[entry.custId].contacts) customerMaster[entry.custId].contacts = {};
         customerMaster[entry.custId].contacts[entry.contactId] = entry.snapshot;
-        await logActivity('restore-contact', entry.label, { custId: entry.custId, contactId: entry.contactId });
+        await logActivity('restore-contact', entry.label, { custId: entry.custId, contactId: entry.contactId, restoredLogId: logId });
       } else if(entry.action === 'delete-note'){
         const key = String(entry.srno);
         // arrayUnion is a no-op if an identical note is somehow already back, so a
         // double-restore can't create a duplicate.
         await writeToFirestore({ [`noteLogs.${key}`]: fb.arrayUnion(entry.snapshot) });
         noteLogs[key] = (noteLogs[key] || []).filter(n => n.id !== entry.snapshot.id).concat([entry.snapshot]);
-        await logActivity('restore-note', entry.label, { srno: key, noteId: entry.snapshot.id });
+        await logActivity('restore-note', entry.label, { srno: key, noteId: entry.snapshot.id, restoredLogId: logId });
       }
-      await writeToFirestore({ [`activityLog.${logId}.restored`]: true });
-      activityLog[logId] = Object.assign({}, entry, { restored: true });
+      // The original deletion entry is deliberately NOT modified. In an append-only
+      // audit log nothing is ever rewritten after the fact -- "was this restored?" is
+      // DERIVED instead, from the presence of a later restore-* entry carrying
+      // restoredLogId (see wasLogEntryRestored). That keeps the security rules able to
+      // forbid updates outright, which is what makes the trail trustworthy.
       renderCustomerMasterPanel();
       renderActivityLogPanel();
     }catch(err){
@@ -5143,10 +5514,16 @@ function renderActivityLogPanel(){
     }
   }));
 }
-$('#openActivityLogBtn').addEventListener('click', () => {
+$('#openActivityLogBtn').addEventListener('click', async () => {
   if(!isSuperAdmin()) return;
-  renderActivityLogPanel();
   $('#activityLogOverlay').classList.add('open');
+  $('#activityLogContent').innerHTML = `<div class="mgmt-empty">Loading audit log…</div>`;
+  try{
+    await loadActivityLogFromCollection();
+    renderActivityLogPanel();
+  }catch(err){
+    $('#activityLogContent').innerHTML = `<div class="mgmt-section"><div class="mgmt-empty">Couldn't load the audit log: ${escapeHtml(err.message)}<br><br>If this says "insufficient permissions", the Firestore security rules for the <code>activityLog</code> collection haven't been deployed yet — see the Super Admin panel.</div></div>`;
+  }
 });
 $('#activityLogCloseBtn').addEventListener('click', () => $('#activityLogOverlay').classList.remove('open'));
 
