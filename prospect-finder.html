@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prospect Finder — Syncaxis</title>
+<style>
+  :root{
+    --bg:#12151b; --panel:#181c24; --panel2:#1e232d; --line:#2a3140;
+    --ink:#e6eaf2; --muted:#9aa4b8; --faint:#6b7688;
+    --accent:#4a90d9; --warn:#f0a63b; --good:#4cb782; --bad:#d96a6a; --violet:#c9a4f0;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1400px;margin:0 auto;padding:20px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .eyebrow{color:var(--faint);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  h1{margin:2px 0 0;font-size:22px;font-weight:600}
+  .sub{color:var(--muted);font-size:13px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .b-a{background:rgba(76,183,130,.16);color:var(--good)}
+  .b-b{background:rgba(240,166,59,.16);color:var(--warn)}
+  .b-c{background:rgba(154,164,184,.14);color:var(--muted)}
+  .b-dup{background:rgba(217,106,106,.16);color:var(--bad)}
+  .b-hot{background:rgba(201,164,240,.16);color:var(--violet)}
+  .section{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+  .section-title{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px}
+  label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+               padding:8px 10px;border-radius:7px;font-size:13px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  button{background:var(--accent);color:#fff;border:0;padding:9px 16px;border-radius:7px;
+         font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  button:hover{filter:brightness(1.1)} button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  button.sm{padding:4px 10px;font-size:11px;font-weight:500}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .kpis{display:flex;gap:22px;flex-wrap:wrap;margin:4px 0 14px}
+  .kpi .n{font-size:24px;font-weight:600;line-height:1.1}
+  .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:1080px}
+  th{background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;
+     letter-spacing:.05em;text-align:left;padding:9px 10px;position:sticky;top:0;white-space:nowrap}
+  td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:top}
+  tr.dup{opacity:.5}
+  tr:hover td{background:rgba(74,144,217,.05)}
+  .co{font-weight:600}
+  .meta{color:var(--faint);font-size:11px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .score{font-weight:700;font-size:15px}
+  .note{color:var(--muted);font-size:12px;margin:-4px 0 12px}
+  .msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px}
+  .msg.err{background:rgba(217,106,106,.12);color:var(--bad);border:1px solid rgba(217,106,106,.3)}
+  .msg.ok{background:rgba(76,183,130,.12);color:var(--good);border:1px solid rgba(76,183,130,.3)}
+  .msg.info{background:rgba(74,144,217,.1);color:var(--accent);border:1px solid rgba(74,144,217,.25)}
+  .hide{display:none}
+  .preview-bar{background:repeating-linear-gradient(45deg,rgba(240,166,59,.14),rgba(240,166,59,.14) 12px,rgba(240,166,59,.22) 12px,rgba(240,166,59,.22) 24px);
+      border:1px solid rgba(240,166,59,.45);color:var(--warn);padding:11px 14px;border-radius:8px;
+      margin-bottom:14px;font-size:13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .preview-bar b{color:#ffce7a}
+  .b-sample{background:rgba(240,166,59,.2);color:var(--warn);border:1px dashed rgba(240,166,59,.6)}
+  body.preview .co::after{content:' SAMPLE';font-size:9px;letter-spacing:.1em;color:var(--warn);
+      background:rgba(240,166,59,.14);padding:1px 5px;border-radius:4px;margin-left:6px;vertical-align:1px}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);
+        border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .bd{font-size:11px;color:var(--faint);white-space:nowrap}
+  @media (max-width:640px){.wrap{padding:12px}h1{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">Syncaxis Leads Tracker</div>
+      <h1>Prospect Finder</h1>
+      <div class="sub">Generate net-new leads by location, application, industry and segment — deduped against everything you already have.</div>
+    </div>
+    <div class="row">
+      <span id="who" class="meta"></span>
+      <button id="signOut" class="ghost sm hide">Sign out</button>
+    </div>
+  </header>
+
+  <div id="authBox" class="section">
+    <div class="section-title">Sign in</div>
+    <div class="note">Use the same account as the Leads Tracker. Prospecting needs Sales, Management or Super Admin.</div>
+    <div class="grid" style="max-width:520px">
+      <div><label>Email</label><input id="email" type="email" autocomplete="username"></div>
+      <div><label>Password</label><input id="password" type="password" autocomplete="current-password"></div>
+    </div>
+    <div style="margin-top:12px"><button id="signIn">Sign in</button></div>
+  </div>
+
+  <div id="app" class="hide">
+
+    <div id="msg"></div>
+
+    <div class="section">
+      <div class="section-title">Search</div>
+      <div class="note">Google Maps is the source. A search costs one billable call per 20 results — the first 5,000 calls each month are free.</div>
+      <div class="grid">
+        <div><label>State</label><select id="fState"></select></div>
+        <div><label>City / area</label><input id="fCity" placeholder="Pune, Nashik, Chakan…"></div>
+        <div><label>Application</label><select id="fApp"></select></div>
+        <div><label>Industry</label><select id="fInd"></select></div>
+        <div><label>Segment</label><select id="fSeg"></select></div>
+        <div><label>Extra keyword</label><input id="fKw" placeholder="e.g. MIG, robotic, tier 1"></div>
+        <div><label>Depth</label><select id="fPages">
+          <option value="1">1 page — 20 results</option>
+          <option value="2">2 pages — 40 results</option>
+          <option value="3">3 pages — 60 results</option>
+        </select></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button id="go">Find prospects</button>
+        <button id="pullIM" class="ghost">Sync IndiaMART now</button>
+        <span id="qPreview" class="meta"></span>
+      </div>
+    </div>
+
+    <div id="results" class="section hide">
+      <div class="section-title">Results</div>
+      <div class="kpis">
+        <div class="kpi"><div class="n" id="kFound">0</div><div class="l">Found</div></div>
+        <div class="kpi"><div class="n" id="kFresh" style="color:var(--good)">0</div><div class="l">New</div></div>
+        <div class="kpi"><div class="n" id="kDup" style="color:var(--bad)">0</div><div class="l">Already known</div></div>
+        <div class="kpi"><div class="n" id="kA">0</div><div class="l">Tier A</div></div>
+        <div class="kpi"><div class="n" id="kCalls">0</div><div class="l">Billable calls</div></div>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <button id="selAll" class="ghost sm">Select all new</button>
+        <button id="selA" class="ghost sm">Select Tier A only</button>
+        <button id="clearSel" class="ghost sm">Clear</button>
+        <select id="assignTo" style="width:auto;min-width:160px"><option value="">Assign to…</option></select>
+        <button id="promote" disabled>Push <span id="selCount">0</span> to Leads</button>
+        <button id="exportCsv" class="ghost">Export CSV</button>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th style="width:32px"></th><th>Score</th><th>Company</th><th>Location</th>
+            <th>Industry</th><th>Application</th><th>Sell</th><th>Contact</th><th>Why</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+/* Firebase is loaded DYNAMICALLY, the same way index.html does it.
+   Static imports are hoisted and run before any of this file's own code, so a
+   blocked CDN, an offline machine or a file:// origin would abort the whole
+   module and render a blank page — including preview mode, which needs no
+   Firebase at all. Loading it lazily keeps the page useful when the SDK isn't
+   available. */
+let initializeApp, getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+    getFunctions, httpsCallable, sdkLoadError = null;
+try {
+  const BASE = 'https://www.gstatic.com/firebasejs/10.13.0/';
+  const [fbApp, fbAuth, fbFns] = await Promise.all([
+    import(BASE + 'firebase-app.js'),
+    import(BASE + 'firebase-auth.js'),
+    import(BASE + 'firebase-functions.js'),
+  ]);
+  ({ initializeApp } = fbApp);
+  ({ getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } = fbAuth);
+  ({ getFunctions, httpsCallable } = fbFns);
+} catch (e) {
+  sdkLoadError = e;
+  console.warn('Firebase SDK could not be loaded:', e);
+}
+
+/* Same project as the Leads Tracker. The apiKey here is a public client
+   identifier, not a secret — Google Places / IndiaMART / Apollo keys live in
+   Secret Manager and are only ever touched by Cloud Functions. */
+const firebaseConfig = {
+  apiKey: "AIzaSyBN1ow9mkIgYhdmLiCVGCa9OSPEvCFOCd0",
+  authDomain: "exhibition-lead-dashboard.firebaseapp.com",
+  projectId: "exhibition-lead-dashboard",
+  storageBucket: "exhibition-lead-dashboard.firebasestorage.app",
+  messagingSenderId: "597395521176",
+  appId: "1:597395521176:web:dd44b202af24c751631aed"
+};
+
+/* Firebase Auth only accepts requests from an authorised domain. Opening this
+   file straight from disk gives a file:// origin, which is never authorised
+   and fails with auth/unauthorized-domain no matter what the password is.
+   Say so plainly instead of showing a cryptic Firebase error. */
+if (location.protocol === 'file:' && new URLSearchParams(location.search).get('preview') !== '1') {
+  document.body.insertAdjacentHTML('afterbegin',
+    '<div style="margin:16px;padding:14px;border-radius:8px;background:rgba(217,106,106,.14);' +
+    'color:#d96a6a;border:1px solid rgba(217,106,106,.35);font:14px system-ui">' +
+    "<b>Opened from disk (file://) — sign-in cannot work here.</b><br>" +
+    'Firebase Auth only accepts authorised domains. Push this file to the ' +
+    'syncaxis-leads-tracker repo and open ' +
+    '<code>inquiry.syncaxis.com/prospect-finder.html</code>, or serve it locally ' +
+    'with <code>npx serve .</code> and open <code>http://localhost:3000</code> ' +
+    '(add <code>localhost</code> under Firebase Console → Authentication → ' +
+    'Settings → Authorised domains).</div>');
+}
+
+/* Preview must render even when the Firebase SDK cannot initialise at all
+   (opened from disk, offline, CDN blocked). Nothing below is needed to show
+   sample data, so a failure here is downgraded to a console warning. */
+let app = null, auth = null, fns = null, sdkError = sdkLoadError;
+if (initializeApp) {
+  try {
+    app  = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    fns  = getFunctions(app, 'asia-south1');
+  } catch (e) {
+    sdkError = e;
+    console.warn('Firebase SDK did not initialise:', e);
+  }
+}
+
+const call = fns ? {
+  search:   httpsCallable(fns, 'searchProspects'),
+  taxonomy: httpsCallable(fns, 'getTaxonomy'),
+  promote:  httpsCallable(fns, 'promoteProspects'),
+  enrich:   httpsCallable(fns, 'enrichProspect'),
+  imNow:    httpsCallable(fns, 'pullIndiaMartLeadsNow'),
+} : {};
+
+const $ = id => document.getElementById(id);
+let ROWS = [], SELECTED = new Set(), TAX = null;
+
+const STATES = ['Maharashtra','Gujarat','Karnataka','Tamil Nadu','Telangana','Haryana','Punjab',
+  'Delhi NCR','Uttar Pradesh','Rajasthan','Madhya Pradesh','West Bengal','Andhra Pradesh','Kerala','Odisha'];
+
+function msg (text, kind = 'info') {
+  $('msg').innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : '';
+}
+function esc (s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function fill (sel, items, blank) {
+  sel.innerHTML = `<option value="">${blank}</option>` +
+    items.map(i => `<option value="${esc(i.key ?? i)}">${esc(i.label ?? i)}</option>`).join('');
+}
+
+/* ---- preview mode -------------------------------------------------------
+   Lets you see exactly what the tool produces before spending an hour on the
+   Blaze upgrade, API keys and a functions deploy. Everything below is
+   FABRICATED and labelled as such — no search runs, nothing is written to
+   Firestore, and no key is used. Activate with ?preview=1 (no login needed),
+   or from the offer shown when the backend cannot be reached.            */
+const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+
+const PREVIEW_TAXONOMY = {
+  industries: [
+    {key:'auto_components',label:'Auto Components'},{key:'fabrication',label:'Fabrication & Job Work'},
+    {key:'machining',label:'CNC / Precision Machining'},{key:'pharma',label:'Pharma & Life Sciences'},
+    {key:'food_bev',label:'Food & Beverage'},{key:'packaging',label:'Packaging & Labelling'},
+    {key:'plastics',label:'Plastics & Moulding'},{key:'electronics',label:'Electronics & EMS'},
+    {key:'foundry',label:'Foundry & Casting'},{key:'textile',label:'Textile'},
+    {key:'system_integrator',label:'System Integrator / SPM'},{key:'education',label:'Education & Training'},
+    {key:'warehouse',label:'Warehouse & Logistics'},{key:'general_mfg',label:'General Manufacturing'}],
+  applications: [
+    {key:'welding',label:'Welding'},{key:'pick_place',label:'Pick & Place / Material Handling'},
+    {key:'palletizing',label:'Palletizing'},{key:'machine_tending',label:'Machine Tending'},
+    {key:'deburring',label:'Deburring / Surface Finishing'},{key:'dispensing',label:'Dispensing / Gluing'},
+    {key:'inspection',label:'Vision / Inspection'},{key:'assembly',label:'Assembly / Screwdriving'},
+    {key:'conveyor',label:'Conveyor Systems'},{key:'structures',label:'Aluminium Profile & Structures'},
+    {key:'drives_servo',label:'Drives & Servo'},{key:'workstation',label:'Workstation / Ergonomics'},
+    {key:'education_kit',label:'Education / Training Kit'},{key:'general',label:'General Automation'}],
+  segments: [{key:'msme',label:'MSME (< 100 staff)'},{key:'mid',label:'Mid-corp (100-500)'},{key:'enterprise',label:'Enterprise (500+)'}],
+};
+
+/* Scores below are what the real scorer in lib/scoring.js actually returns for
+   these inputs — the numbers are honest even though the companies are invented. */
+function previewRows () {
+  const mk = (company, city, state, ind, indL, app, appL, brand, lt, phone, email, site, bd, dup, stage) => {
+    const score = bd.reduce((t, b) => t + b.points, 0);
+    return { company, city, state, industry: ind, industryLabel: indL, industryEvidence: [],
+      applications: [app], applicationLabel: appL, brand, leadType: lt, phone, email, website: site,
+      primaryType: 'Manufacturer', score, tier: score >= 57 ? 'A' : score >= 44 ? 'B' : 'C',
+      breakdown: bd, recommendedAction: score >= 57 ? 'Call this week' : score >= 44 ? 'Email, then call within 2 weeks' : 'Nurture — newsletter / campaign only',
+      isDuplicate: !!dup, duplicateOf: dup || null, buyingStage: stage || 'cold',
+      placeId: 'PREVIEW_' + Math.random().toString(36).slice(2, 9), mapsUri: '' };
+  };
+  const B = (t, p, w) => ({ factor: t, points: p, why: w });
+  return [
+    mk('Shreeji Fabtech Engineering','Chakan','Maharashtra','fabrication','Fabrication & Job Work','welding','Welding','Dobot','Project','02135 264180','','shreejifabtech.example',
+       [B('Territory',12,'Maharashtra'),B('Application',25,'Welding'),B('Industry',20,'Fabrication & Job Work'),B('Contactability',8,'phone, site'),B('Segment',3,'msme')],null),
+    mk('Vardhman Auto Pressings','Pimpri','Maharashtra','auto_components','Auto Components','welding','Welding','Dobot','Project','020 27651440','sales@vardhmanauto.example','vardhmanauto.example',
+       [B('Territory',12,'Maharashtra'),B('Application',25,'Welding'),B('Industry',20,'Auto Components'),B('Contactability',12,'phone, email, site'),B('Segment',6,'mid')],null),
+    mk('Ashwini Precision Components','Nashik','Maharashtra','machining','CNC / Precision Machining','machine_tending','Machine Tending','Dobot','Project','0253 2381907','','',
+       [B('Territory',12,'Maharashtra'),B('Application',22,'Machine Tending'),B('Industry',18,'CNC / Precision Machining'),B('Contactability',6,'phone')],null),
+    mk('Konkan Polymers & Moulding','Ambernath','Maharashtra','plastics','Plastics & Moulding','machine_tending','Machine Tending','Dobot','Project','0251 2620914','info@konkanpoly.example','',
+       [B('Territory',12,'Maharashtra'),B('Application',22,'Machine Tending'),B('Industry',14,'Plastics & Moulding'),B('Contactability',10,'phone, email')],null),
+    mk('Sahyadri Foods Processing','Satara','Maharashtra','food_bev','Food & Beverage','palletizing','Palletizing','Dobot','Project','02162 240377','','sahyadrifoods.example',
+       [B('Territory',12,'Maharashtra'),B('Application',22,'Palletizing'),B('Industry',14,'Food & Beverage'),B('Contactability',8,'phone, site')],null),
+    mk('Deccan Structural Profiles','Pune','Maharashtra','general_mfg','General Manufacturing','structures','Aluminium Profile & Structures','Bosch Rexroth','Trading','020 24451209','','',
+       [B('Territory',12,'Maharashtra'),B('Application',15,'Aluminium Profile & Structures'),B('Industry',12,'General Manufacturing'),B('Contactability',6,'phone')],null),
+    mk('Gokul Weldtech Industries','Kolhapur','Maharashtra','fabrication','Fabrication & Job Work','welding','Welding','Dobot','Project','0231 2678123','md@gokulweldtech.example','',
+       [B('Territory',12,'Maharashtra'),B('Application',25,'Welding'),B('Industry',20,'Fabrication & Job Work'),B('Contactability',10,'phone, email'),B('Buying stage',20,'in_market')],null,'in_market'),
+    mk('Nexontech Automation Pvt Ltd','Ahmedabad','Gujarat','system_integrator','System Integrator / SPM','general','General Automation','Dobot','Project','9898269836','md@nexontechautomation.example','',
+       [B('Territory',8,'Gujarat'),B('Application',8,'General Automation'),B('Industry',11,'System Integrator / SPM'),B('Contactability',10,'phone, email')],
+       { source:'lead', company:'Nexontech Automation', matchedOn:'phone', confidence:1.0 }),
+    mk('Government Polytechnic, Pune','Pune','Maharashtra','education','Education & Training','education_kit','Education / Training Kit','Dobot','Project','020 25656066','','gppune.example',
+       [B('Territory',12,'Maharashtra'),B('Application',5,'Education / Training Kit'),B('Industry',3,'Education & Training'),B('Contactability',8,'phone, site')],null),
+  ].sort((a, b) => Number(a.isDuplicate) - Number(b.isDuplicate) || b.score - a.score);
+}
+
+function enterPreview () {
+  document.body.classList.add('preview');
+  $('authBox').classList.add('hide');
+  $('app').classList.remove('hide');
+  $('who').textContent = 'preview mode';
+  $('signOut').classList.add('hide');
+  TAX = PREVIEW_TAXONOMY;
+  fill($('fApp'), TAX.applications, 'Any application');
+  fill($('fInd'), TAX.industries, 'Any industry');
+  fill($('fSeg'), TAX.segments, 'Any size');
+  $('pullIM').classList.add('hide');
+  document.querySelector('.wrap').insertAdjacentHTML('afterbegin',
+    '<div class="preview-bar"><b>PREVIEW — fabricated data.</b>' +
+    '<span>These companies do not exist. No search runs, nothing is saved, no API key is used. ' +
+    'The scores and tiers are what the real scorer returns for these inputs, so the ranking behaviour is accurate.</span>' +
+    '<a href="?">exit preview</a></div>');
+  msg('Press <b>Find prospects</b> to see the output format. Deploy the Cloud Functions to search for real.', 'info');
+}
+
+/* ---- auth ---- */
+if (auth) onAuthStateChanged(auth, async user => {
+  if (PREVIEW) return;
+  if (!user) {
+    $('authBox').classList.remove('hide'); $('app').classList.add('hide');
+    $('signOut').classList.add('hide'); $('who').textContent = '';
+    return;
+  }
+  $('authBox').classList.add('hide'); $('app').classList.remove('hide');
+  $('signOut').classList.remove('hide'); $('who').textContent = user.email;
+  try {
+    TAX = (await call.taxonomy()).data;
+    fill($('fApp'), TAX.applications, 'Any application');
+    fill($('fInd'), TAX.industries, 'Any industry');
+    fill($('fSeg'), TAX.segments.filter(s => s.key !== 'unknown'), 'Any size');
+    msg('');
+  } catch (e) {
+    const code = (e && e.code) || '';
+    if (code === 'functions/permission-denied') {
+      msg(`Signed in as ${esc(user.email)}, but this account has no active role in the Leads Tracker. Ask the Super Admin to add it. (${esc(e.message)})`, 'err');
+    } else if (code === 'functions/unauthenticated') {
+      msg('Session expired — sign in again.', 'err');
+    } else if (code === 'functions/internal' || code === 'functions/not-found') {
+      msg('Signed in, but the Cloud Functions are not reachable — they have probably not been deployed yet. Run <code>firebase deploy --only functions</code>. '
+        + 'In the meantime you can <a href="?preview=1">see the tool with sample data</a>.', 'err');
+    } else {
+      msg(`Signed in, but loading the taxonomy failed: ${esc(e.message)}`, 'err');
+    }
+    console.error('getTaxonomy failed', e);
+  }
+});
+
+const AUTH_ERRORS = {
+  'auth/invalid-credential':     'Incorrect email or password.',
+  'auth/user-not-found':         'No account with that email.',
+  'auth/wrong-password':         'Incorrect password.',
+  'auth/invalid-email':          "That doesn't look like a valid email address.",
+  'auth/too-many-requests':      'Too many failed attempts — try again in a few minutes.',
+  'auth/network-request-failed': 'Network error — check your connection and try again.',
+  'auth/unauthorized-domain':    'This page is not on an authorised domain. Add it under Firebase Console → Authentication → Settings → Authorised domains.',
+  'auth/api-key-not-valid':      'The Firebase apiKey in this file is wrong. Copy the one from index.html.',
+  'auth/operation-not-allowed':  'Email/password sign-in is switched off for this project.',
+};
+
+async function doSignIn () {
+  const em = $('email').value.trim(), pw = $('password').value;
+  if (!em || !pw) { msg('Enter both email and password.', 'err'); return; }
+  const b = $('signIn'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Signing in…';
+  try {
+    await signInWithEmailAndPassword(auth, em, pw);
+  } catch (e) {
+    const code = (e && e.code) || '';
+    msg(AUTH_ERRORS[code] || `Sign-in failed: ${esc(e.message)}${code ? ` (${esc(code)})` : ''}`, 'err');
+    console.error('sign-in failed', e);
+  } finally { b.disabled = false; b.textContent = 'Sign in'; }
+}
+$('signIn').onclick = doSignIn;
+$('password').addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
+$('signOut').onclick = () => auth && signOut(auth);
+if (!auth && !PREVIEW) {
+  msg('Firebase could not start on this page. If you opened the file from disk, ' +
+      'use <a href="?preview=1">preview mode</a> or serve it over http.', 'err');
+}
+
+fill($('fState'), STATES, 'Any state');
+$('fState').value = 'Maharashtra';
+
+/* live query preview so nobody wastes a billable call on a vague search */
+function preview () {
+  const bits = [];
+  if ($('fKw').value) bits.push($('fKw').value);
+  const a = $('fApp').selectedOptions[0]; if (a && a.value) bits.push(a.textContent.split('/')[0].trim().toLowerCase());
+  const i = $('fInd').selectedOptions[0]; if (i && i.value) bits.push(i.textContent.split('&')[0].trim().toLowerCase());
+  if (!bits.length) bits.push('manufacturing');
+  const where = [$('fCity').value, $('fState').value, 'India'].filter(Boolean).join(', ');
+  $('qPreview').textContent = `→ "${bits.join(' ')} companies in ${where}"`;
+}
+['fCity','fApp','fInd','fKw','fState'].forEach(id => $(id).addEventListener('input', preview));
+preview();
+if (PREVIEW) enterPreview();
+
+/* ---- search ---- */
+$('go').onclick = async () => {
+  if (PREVIEW) {
+    ROWS = previewRows(); SELECTED.clear();
+    render({ counts: { found: ROWS.length, fresh: ROWS.filter(r => !r.isDuplicate).length,
+                       duplicates: ROWS.filter(r => r.isDuplicate).length }, billableCalls: 0 });
+    msg('Sample output — fabricated companies, real scoring logic. Nothing was searched or saved.', 'info');
+    return;
+  }
+  const btn = $('go');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Searching…';
+  msg('');
+  try {
+    const res = (await call.search({
+      state: $('fState').value, city: $('fCity').value.trim(),
+      application: $('fApp').value, industry: $('fInd').value,
+      segment: $('fSeg').value, keyword: $('fKw').value.trim(),
+      maxPages: Number($('fPages').value), save: true,
+    })).data;
+    ROWS = res.results; SELECTED.clear();
+    render(res);
+    if (!res.counts.fresh) msg('Every result is already in your database. Try a different city or application.', 'info');
+  } catch (e) {
+    msg(`Search failed: ${esc(e.message)}`, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Find prospects';
+  }
+};
+
+$('pullIM').onclick = async () => {
+  if (PREVIEW) { msg('Preview mode — IndiaMART is not contacted.', 'err'); return; }
+  const b = $('pullIM'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Syncing…';
+  try {
+    const r = (await call.imNow()).data;
+    msg(r.skipped ? 'IndiaMART was polled less than 5 minutes ago — skipped to protect the key.'
+      : r.error ? `IndiaMART error: ${esc(r.error)}`
+      : `IndiaMART: pulled ${r.pulled}, added ${r.written} new, ${r.duplicates} already known.`,
+      r.error ? 'err' : 'ok');
+  } catch (e) { msg(`IndiaMART sync failed: ${esc(e.message)}`, 'err'); }
+  finally { b.disabled = false; b.textContent = 'Sync IndiaMART now'; }
+};
+
+/* ---- render ---- */
+function render (res) {
+  $('results').classList.remove('hide');
+  $('kFound').textContent = res.counts.found;
+  $('kFresh').textContent = res.counts.fresh;
+  $('kDup').textContent   = res.counts.duplicates;
+  $('kA').textContent     = ROWS.filter(r => !r.isDuplicate && r.tier === 'A').length;
+  $('kCalls').textContent = res.billableCalls;
+
+  $('tbody').innerHTML = ROWS.map((r, i) => {
+    const dup = r.isDuplicate;
+    const why = (r.breakdown || []).map(b => `+${b.points} ${b.factor}`).join(' · ');
+    const contact = [
+      r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '',
+      r.email ? `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` : '',
+      r.website ? `<a href="${esc(r.website)}" target="_blank" rel="noopener">site</a>` : '',
+    ].filter(Boolean).join('<br>') || '<span class="meta">none</span>';
+    return `<tr class="${dup ? 'dup' : ''}" data-i="${i}">
+      <td>${dup ? '' : `<input type="checkbox" class="pick" data-i="${i}" style="width:auto">`}</td>
+      <td><span class="score" style="color:${r.tier === 'A' ? 'var(--good)' : r.tier === 'B' ? 'var(--warn)' : 'var(--muted)'}">${r.score}</span>
+          <span class="badge b-${r.tier.toLowerCase()}">${r.tier}</span>
+          ${r.buyingStage === 'in_market' ? '<br><span class="badge b-hot">IN MARKET</span>' : ''}</td>
+      <td><div class="co">${esc(r.company)}</div>
+          <div class="meta">${esc(r.primaryType || '')}</div>
+          ${dup ? `<span class="badge b-dup">already a ${esc(r.duplicateOf.source)} — matched on ${esc(r.duplicateOf.matchedOn)}</span>` : ''}</td>
+      <td>${esc(r.city || '')}<div class="meta">${esc(r.state || '')}</div></td>
+      <td>${esc(r.industryLabel || '')}<div class="meta">${esc((r.industryEvidence || []).slice(0,2).join(', '))}</div></td>
+      <td>${esc(r.applicationLabel || '')}</td>
+      <td>${esc(r.brand || '')}<div class="meta">${esc(r.leadType || '')}</div></td>
+      <td>${contact}</td>
+      <td class="bd">${esc(why)}<div class="meta">${esc(r.recommendedAction || '')}</div></td>
+      <td>${r.mapsUri ? `<a href="${esc(r.mapsUri)}" target="_blank" rel="noopener">map</a>` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  document.querySelectorAll('.pick').forEach(cb => cb.onchange = () => {
+    const i = Number(cb.dataset.i);
+    cb.checked ? SELECTED.add(i) : SELECTED.delete(i);
+    syncSel();
+  });
+  syncSel();
+}
+
+function syncSel () {
+  $('selCount').textContent = SELECTED.size;
+  $('promote').disabled = SELECTED.size === 0;
+}
+function setSel (pred) {
+  SELECTED.clear();
+  ROWS.forEach((r, i) => { if (!r.isDuplicate && pred(r)) SELECTED.add(i); });
+  document.querySelectorAll('.pick').forEach(cb => cb.checked = SELECTED.has(Number(cb.dataset.i)));
+  syncSel();
+}
+$('selAll').onclick   = () => setSel(() => true);
+$('selA').onclick     = () => setSel(r => r.tier === 'A');
+$('clearSel').onclick = () => setSel(() => false);
+
+$('promote').onclick = async () => {
+  if (PREVIEW) { msg('Preview mode — nothing is written to the lead board.', 'err'); return; }
+  const ids = [...SELECTED].map(i => `gmaps_${ROWS[i].placeId}`);
+  const b = $('promote'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Pushing…';
+  try {
+    const r = (await call.promote({ prospectIds: ids, assignTo: $('assignTo').value })).data;
+    msg(`Pushed ${r.promoted} prospect(s) into the lead board. They appear in the tracker as "Not Contacted".`, 'ok');
+    setSel(() => false);
+  } catch (e) { msg(`Push failed: ${esc(e.message)}`, 'err'); }
+  finally { b.disabled = false; b.innerHTML = 'Push <span id="selCount">0</span> to Leads'; syncSel(); }
+};
+
+$('exportCsv').onclick = () => {
+  const cols = ['score','tier','company','city','state','industryLabel','applicationLabel','brand','leadType','phone','email','website','address','recommendedAction','isDuplicate'];
+  const csv = [cols.join(',')].concat(ROWS.map(r =>
+    cols.map(c => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(','))).join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'syncaxis_prospects.csv' });
+  a.click(); URL.revokeObjectURL(url);
+};
+</script>
+</body>
+</html>
