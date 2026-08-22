@@ -290,6 +290,19 @@
   }
   table.leads td{ padding:5px 8px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
   table.leads tr:hover td{ background: rgba(255,255,255,0.02); }
+  /* Pin the Edit column to the right edge on desktop. The table is ~30 columns wide,
+     so an edit affordance that only appears after scrolling all the way right is
+     effectively invisible from where the mistake is actually spotted. Scoped above
+     the mobile breakpoint, where the table becomes stacked cards and sticky makes no
+     sense. Opaque background so the scrolling cells pass underneath it, not through. */
+  @media (min-width:761px){
+    table.leads th:last-child, table.leads td:last-child{
+      position:sticky; right:0; z-index:2;
+      background: var(--panel); border-left:1px solid var(--line);
+    }
+    table.leads thead th:last-child{ background: var(--panel-2); z-index:3; }
+    table.leads tr:hover td:last-child{ background: var(--panel-2); }
+  }
   tr.new-row td{ background: rgba(76,183,130,0.05); }
 
   .cell-input{
@@ -591,6 +604,11 @@
 <div class="offline-banner" id="offlineBanner">
   ⚠ No internet connection — you can keep viewing and editing, but nothing will sync to your team until you're back online.
 </div>
+<!-- Suggestions for the leads table's inline State/City cells. Deliberately separate
+     from the Add/Edit modals' cascade datalists, which get rewritten as a country is
+     chosen — the table needs a stable list of every value already in use. -->
+<datalist id="leadStateList"></datalist>
+<datalist id="leadCityList"></datalist>
 <div class="theme-toggle-fixed" id="themeToggle">
   <button type="button" data-theme="dark" title="Dark mode">🌙</button>
   <button type="button" data-theme="light" title="Light mode">☀</button>
@@ -2246,6 +2264,11 @@ function uniqueSorted(key){ return [...new Set(workingLeads.map(r => r[key]).fil
 function fillSelect(sel, values, placeholder){
   sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
 }
+function refreshLeadCellDatalists(){
+  const st = $('#leadStateList'), ci = $('#leadCityList');
+  if(st) st.innerHTML = uniqueSorted('State').map(v => `<option value="${escapeHtml(v)}">`).join('');
+  if(ci) ci.innerHTML = uniqueSorted('City').map(v => `<option value="${escapeHtml(v)}">`).join('');
+}
 function refreshFilterOptions(){
   const keepState = $('#stateFilter').value, keepCity = $('#cityFilter').value, keepApp = $('#appFilter').value,
         keepProd = $('#productFilter').value, keepStatus = $('#statusFilter').value;
@@ -2254,6 +2277,7 @@ function refreshFilterOptions(){
   fillSelect($('#appFilter'), APP_CATS, 'All Applications');
   fillSelect($('#productFilter'), uniqueSorted('Product Interest'), 'All Products');
   fillSelect($('#statusFilter'), STATUS_OPTIONS, 'Status: Any');
+  refreshLeadCellDatalists();
   $('#stateFilter').value = keepState; $('#cityFilter').value = keepCity; $('#appFilter').value = keepApp;
   $('#productFilter').value = keepProd; $('#statusFilter').value = keepStatus;
 }
@@ -2357,11 +2381,23 @@ function rowHtml(r){
       <td data-label="Customer ID" style="font-family:var(--font-mono); font-size:11px; color:var(--text-faint);" title="Linked Customer Master record — set automatically, not editable here">${escapeHtml(r['Customer ID']) || '—'}</td>
       <td data-label="Department"><input class="cell-input" data-field="Department" value="${(r['Department']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
       <td data-label="Contact Person Name"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
-      <td data-label="State">${escapeHtml(r.State)}</td>
-      <td data-label="City">${escapeHtml(r.City)}</td>
-      <td data-label="Country">${escapeHtml(r.Country)}</td>
-      <td data-label="Application">${escapeHtml(r['Application Category'])}${r['Application (as recorded)'] ? ` <span style="color:var(--text-faint)">(${escapeHtml(r['Application (as recorded)'])})</span>` : ''}</td>
-      <td data-label="Product">${productTag(r['Product Interest'])}</td>
+      <td data-label="State"><input class="cell-input" data-field="State" list="leadStateList" value="${(r.State||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></td>
+      <td data-label="City"><input class="cell-input" data-field="City" list="leadCityList" value="${(r.City||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></td>
+      <td data-label="Country"><select class="cell-input" data-field="Country" style="min-width:120px;">
+            <option value="" ${!r.Country?'selected':''}>—</option>
+            ${COUNTRY_OPTIONS.includes(r.Country) || !r.Country ? '' : `<option value="${escapeHtml(r.Country)}" selected>${escapeHtml(r.Country)}</option>`}
+            ${COUNTRY_OPTIONS.map(c=>`<option value="${escapeHtml(c)}" ${c===r.Country?'selected':''}>${escapeHtml(c)}</option>`).join('')}
+          </select></td>
+      <td data-label="Application"><select class="cell-input" data-field="Application Category" style="min-width:150px;" title="${(r['Application (as recorded)']||'').replace(/"/g,'&quot;')}">
+            <option value="" ${!r['Application Category']?'selected':''}>—</option>
+            ${ALL_APP_CATS.includes(r['Application Category']) || !r['Application Category'] ? '' : `<option value="${escapeHtml(r['Application Category'])}" selected>${escapeHtml(r['Application Category'])}</option>`}
+            ${ALL_APP_CATS.map(a=>`<option value="${escapeHtml(a)}" ${a===r['Application Category']?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+          </select></td>
+      <td data-label="Product"><select class="cell-input" data-field="Product Interest" style="min-width:130px;">
+            <option value="" ${!r['Product Interest']?'selected':''}>—</option>
+            ${PRODUCT_OPTIONS.includes(r['Product Interest']) || !r['Product Interest'] ? '' : `<option value="${escapeHtml(r['Product Interest'])}" selected>${escapeHtml(r['Product Interest'])}</option>`}
+            ${PRODUCT_OPTIONS.map(pp=>`<option value="${escapeHtml(pp)}" ${pp===r['Product Interest']?'selected':''}>${escapeHtml(pp)}</option>`).join('')}
+          </select></td>
       <td data-label="Email"><input class="cell-input" type="email" data-field="Email ID" value="${(r['Email ID']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Email ID']||'').replace(/"/g,'&quot;')}" style="min-width:190px;"></td>
       <td data-label="Phone"><input class="cell-input" type="tel" data-field="Phone No." value="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" style="min-width:130px;"></td>
       <td data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status">
@@ -2455,6 +2491,11 @@ function wireRowEvents(){
         if(el.dataset.field === 'Lead Value'){
           el.value = formatINR(valueToSave);
           renderKPIs();
+        }
+        // These feed the charts, the matrix and the filter dropdowns, so a correction
+        // here has to flow through to them rather than only changing the cell.
+        if(['State','City','Country','Application Category','Product Interest'].includes(el.dataset.field)){
+          renderKPIs(); renderCharts(); renderMatrix(); renderInsight(); refreshFilterOptions();
         }
         if(el.dataset.field === 'Lead Quality'){
           const badge = tr.querySelector('.priority-badge');
