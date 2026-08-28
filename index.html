@@ -675,6 +675,89 @@
   .kpi-row{ grid-template-columns: 1fr !important; }
   .nav-tab-bar .nav-link{ padding:11px 12px; font-size:12.5px; }
 }
+
+/* ===== Comprehensive Filter Panel ===== */
+.filter-panel{
+  background: var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:14px 16px; margin-bottom:14px;
+}
+.filter-panel-header{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  margin-bottom:0; cursor:pointer; user-select:none;
+}
+.filter-panel-header h6{
+  margin:0; font-family:var(--font-display); font-size:13px; font-weight:600;
+  color:var(--text); display:flex; align-items:center; gap:8px;
+}
+.filter-panel-header .filter-count-badge{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:20px; height:20px; padding:0 6px; border-radius:999px;
+  font-size:10px; font-weight:700; background:var(--blue); color:#fff;
+}
+.filter-panel-header .filter-count-badge.empty{ background:var(--line); color:var(--text-faint); }
+.filter-panel-header .filter-toggle-icon{
+  font-size:12px; color:var(--text-faint); transition:transform .2s;
+}
+.filter-panel.collapsed .filter-toggle-icon{ transform:rotate(-90deg); }
+.filter-panel-body{
+  margin-top:14px; display:block;
+  animation:filterExpand .2s ease;
+}
+.filter-panel.collapsed .filter-panel-body{ display:none; }
+@keyframes filterExpand{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
+
+.filter-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));
+  gap:10px 12px;
+}
+.filter-grid .filter-group{ display:flex; flex-direction:column; gap:4px; }
+.filter-grid .filter-label{
+  font-size:10px; font-weight:600; color:var(--text-faint);
+  text-transform:uppercase; letter-spacing:.06em;
+}
+.filter-grid select, .filter-grid input{
+  width:100%; background:var(--panel-2); border:1px solid var(--line);
+  color:var(--text); border-radius:6px; padding:6px 8px; font-size:12.5px;
+  font-family:var(--font-body);
+}
+.filter-grid select:focus, .filter-grid input:focus{
+  outline:none; border-color:var(--blue);
+}
+.filter-grid input::placeholder{ color:var(--text-faint); }
+
+/* Quick filters row (always visible) */
+.filter-quick-row{
+  display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+}
+.filter-quick-row input, .filter-quick-row select{
+  background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+  border-radius:6px; padding:7px 10px; font-size:13px; font-family:var(--font-body);
+}
+.filter-quick-row input{ flex:1 1 200px; min-width:180px; }
+.filter-quick-row select{ min-width:120px; }
+.filter-quick-row input:focus, .filter-quick-row select:focus{ outline:none; border-color:var(--blue); }
+.filter-quick-row input::placeholder{ color:var(--text-faint); }
+
+.filter-actions{
+  display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap;
+}
+.filter-actions .btn{ font-size:11px; }
+.filter-active-summary{
+  font-size:11px; color:var(--text-faint); margin-left:auto;
+  font-family:var(--font-mono);
+}
+
+/* Mobile adjustments */
+@media (max-width: 760px){
+  .filter-grid{ grid-template-columns:1fr 1fr; gap:8px; }
+  .filter-quick-row{ flex-direction:column; align-items:stretch; }
+  .filter-quick-row input, .filter-quick-row select{ width:100%; min-width:0; }
+  .filter-actions{ flex-wrap:wrap; }
+  .filter-active-summary{ margin-left:0; width:100%; text-align:left; }
+}
+@media (max-width: 480px){
+  .filter-grid{ grid-template-columns:1fr; }
+}
 </style>
 
 </head>
@@ -847,14 +930,100 @@
         <button class="btn btn-primary" id="addLeadBtn">+ ADD LEAD</button>
       </div>
     </div>
-    <div class="filter-bar">
-      <input type="text" id="searchBox" placeholder="Search company, department, contact, city, email…">
-      <select id="stateFilter"><option value="">All States</option></select>
-      <select id="cityFilter"><option value="">All Cities</option></select>
-      <select id="appFilter"><option value="">All Applications</option></select>
-      <select id="productFilter"><option value="">All Products</option></select>
-      <select id="statusFilter"><option value="">Status: Any</option></select>
-      <button class="btn" id="clearBtn">CLEAR FILTERS</button>
+    <div class="filter-panel" id="filterPanel">
+      <div class="filter-panel-header" id="filterPanelHeader">
+        <h6>🔍 Filters <span class="filter-count-badge empty" id="filterCountBadge">0</span></h6>
+        <span class="filter-toggle-icon">▼</span>
+      </div>
+      <div class="filter-panel-body" id="filterPanelBody">
+        <!-- Quick search row (always visible) -->
+        <div class="filter-quick-row">
+          <input type="text" id="searchBox" placeholder="🔍 Search company, department, contact, city, email, phone, enquiry no…">
+          <select id="stateFilter"><option value="">All States</option></select>
+          <select id="cityFilter"><option value="">All Cities</option></select>
+          <select id="statusFilter"><option value="">Status: Any</option></select>
+        </div>
+        <!-- Advanced filters grid -->
+        <div class="filter-grid" style="margin-top:12px;">
+          <div class="filter-group">
+            <label class="filter-label">Company</label>
+            <input type="text" id="companyFilter" placeholder="Any company">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Department</label>
+            <input type="text" id="deptFilter" placeholder="Any department">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Contact Person</label>
+            <input type="text" id="contactFilter" placeholder="Any contact">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Country</label>
+            <select id="countryFilter"><option value="">All Countries</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Application</label>
+            <select id="appFilter"><option value="">All Applications</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Product</label>
+            <select id="productFilter"><option value="">All Products</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Priority</label>
+            <select id="priorityFilter"><option value="">Any Priority</option><option value="🔥 Hot">🔥 Hot</option><option value="🌤 Warm">🌤 Warm</option><option value="❄️ Cold">❄️ Cold</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Source</label>
+            <select id="sourceFilter"><option value="">All Sources</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Lead Type</label>
+            <select id="leadTypeFilter"><option value="">All Types</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Moved to SourcePro</label>
+            <select id="sourceProFilter"><option value="">Any</option><option value="Yes">Yes</option><option value="No">No</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Generated By</label>
+            <select id="genByFilter"><option value="">Anyone</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Assigned To</label>
+            <select id="assignToFilter"><option value="">Anyone</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Lead Value (min ₹)</label>
+            <input type="number" id="leadValueMinFilter" placeholder="0" min="0">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Lead Value (max ₹)</label>
+            <input type="number" id="leadValueMaxFilter" placeholder="No limit" min="0">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Next Follow-up From</label>
+            <input type="date" id="followUpFromFilter">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Next Follow-up To</label>
+            <input type="date" id="followUpToFilter">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Enquiry Received From</label>
+            <input type="date" id="receivedFromFilter">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Enquiry Received To</label>
+            <input type="date" id="receivedToFilter">
+          </div>
+        </div>
+        <!-- Actions -->
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="clearBtn">✕ Clear All Filters</button>
+          <span class="filter-active-summary" id="filterSummary"></span>
+        </div>
+      </div>
     </div>
     <div class="table-scroll">
       <table class="leads">
@@ -2390,14 +2559,29 @@ function refreshLeadCellDatalists(){
 function refreshFilterOptions(){
   const keepState = $('#stateFilter').value, keepCity = $('#cityFilter').value, keepApp = $('#appFilter').value,
         keepProd = $('#productFilter').value, keepStatus = $('#statusFilter').value;
+  const keepCountry = $('#countryFilter')?$('#countryFilter').value:'';
+  const keepSrc = $('#sourceFilter')?$('#sourceFilter').value:'';
+  const keepLT = $('#leadTypeFilter')?$('#leadTypeFilter').value:'';
+  const keepGB = $('#genByFilter')?$('#genByFilter').value:'';
+  const keepAT = $('#assignToFilter')?$('#assignToFilter').value:'';
   fillSelect($('#stateFilter'), uniqueSorted('State'), 'All States');
   fillSelect($('#cityFilter'), uniqueSorted('City'), 'All Cities');
   fillSelect($('#appFilter'), APP_CATS, 'All Applications');
   fillSelect($('#productFilter'), uniqueSorted('Product Interest'), 'All Products');
   fillSelect($('#statusFilter'), STATUS_OPTIONS, 'Status: Any');
+  if($('#countryFilter')) fillSelect($('#countryFilter'), uniqueSorted('Country'), 'All Countries');
+  if($('#sourceFilter')) fillSelect($('#sourceFilter'), uniqueSorted('Inquiry Source'), 'All Sources');
+  if($('#leadTypeFilter')) fillSelect($('#leadTypeFilter'), uniqueSorted('Lead Type'), 'All Types');
+  if($('#genByFilter')) fillSelect($('#genByFilter'), uniqueSorted('Lead Generated By'), 'Anyone');
+  if($('#assignToFilter')) fillSelect($('#assignToFilter'), uniqueSorted('Enquiry Assigned To'), 'Anyone');
   refreshLeadCellDatalists();
   $('#stateFilter').value = keepState; $('#cityFilter').value = keepCity; $('#appFilter').value = keepApp;
   $('#productFilter').value = keepProd; $('#statusFilter').value = keepStatus;
+  if($('#countryFilter')) $('#countryFilter').value = keepCountry;
+  if($('#sourceFilter')) $('#sourceFilter').value = keepSrc;
+  if($('#leadTypeFilter')) $('#leadTypeFilter').value = keepLT;
+  if($('#genByFilter')) $('#genByFilter').value = keepGB;
+  if($('#assignToFilter')) $('#assignToFilter').value = keepAT;
 }
 
 function productTag(p){
@@ -2427,9 +2611,25 @@ function mailtoFor(row){
 
 let lastFiltered = [];
 function applyFilters(){
-  const q = $('#searchBox').value.trim().toLowerCase();
+  const q = ($('#searchBox').value||'').trim().toLowerCase();
   const st = $('#stateFilter').value, ci = $('#cityFilter').value, ap = $('#appFilter').value,
         pr = $('#productFilter').value, su = $('#statusFilter').value;
+  const co = $('#countryFilter') ? $('#countryFilter').value : '';
+  const comp = $('#companyFilter') ? $('#companyFilter').value.trim().toLowerCase() : '';
+  const dept = $('#deptFilter') ? $('#deptFilter').value.trim().toLowerCase() : '';
+  const contact = $('#contactFilter') ? $('#contactFilter').value.trim().toLowerCase() : '';
+  const prio = $('#priorityFilter') ? $('#priorityFilter').value : '';
+  const src = $('#sourceFilter') ? $('#sourceFilter').value : '';
+  const lt = $('#leadTypeFilter') ? $('#leadTypeFilter').value : '';
+  const sp = $('#sourceProFilter') ? $('#sourceProFilter').value : '';
+  const gb = $('#genByFilter') ? $('#genByFilter').value : '';
+  const at = $('#assignToFilter') ? $('#assignToFilter').value : '';
+  const lvMin = $('#leadValueMinFilter') ? parseFloat($('#leadValueMinFilter').value) || 0 : 0;
+  const lvMax = $('#leadValueMaxFilter') ? parseFloat($('#leadValueMaxFilter').value) || 0 : 0;
+  const fuFrom = $('#followUpFromFilter') ? $('#followUpFromFilter').value : '';
+  const fuTo = $('#followUpToFilter') ? $('#followUpToFilter').value : '';
+  const rcFrom = $('#receivedFromFilter') ? $('#receivedFromFilter').value : '';
+  const rcTo = $('#receivedToFilter') ? $('#receivedToFilter').value : '';
 
   const filtered = workingLeads.filter(r => {
     if(st && r.State !== st) return false;
@@ -2437,8 +2637,30 @@ function applyFilters(){
     if(ap && r['Application Category'] !== ap) return false;
     if(pr && r['Product Interest'] !== pr) return false;
     if(su && (r['Follow-Up Status']||'Not Contacted') !== su) return false;
+    if(co && r.Country !== co) return false;
+    if(comp && !(r['Company Name']||'').toLowerCase().includes(comp)) return false;
+    if(dept && !(r['Department']||'').toLowerCase().includes(dept)) return false;
+    if(contact && !(r['Visitor Name']||'').toLowerCase().includes(contact)) return false;
+    if(prio && r['Lead Quality'] !== prio) return false;
+    if(src && r['Inquiry Source'] !== src) return false;
+    if(lt && r['Lead Type'] !== lt) return false;
+    if(sp && r['Moved to SourcePro'] !== sp) return false;
+    if(gb && r['Lead Generated By'] !== gb) return false;
+    if(at && r['Enquiry Assigned To'] !== at) return false;
+    if(lvMin > 0){
+      const lv = parseINR(r['Lead Value']).value;
+      if(typeof lv !== 'number' || lv < lvMin) return false;
+    }
+    if(lvMax > 0){
+      const lv = parseINR(r['Lead Value']).value;
+      if(typeof lv !== 'number' || lv > lvMax) return false;
+    }
+    if(fuFrom && r['Next Follow-up Date'] && r['Next Follow-up Date'] < fuFrom) return false;
+    if(fuTo && r['Next Follow-up Date'] && r['Next Follow-up Date'] > fuTo) return false;
+    if(rcFrom && r['Received Date'] && r['Received Date'] < rcFrom) return false;
+    if(rcTo && r['Received Date'] && r['Received Date'] > rcTo) return false;
     if(q){
-      const hay = [r['Company Name'], r['Department'], r['Visitor Name'], r.City, r.State, r['Email ID'], r['Application (as recorded)']]
+      const hay = [r['Company Name'], r['Department'], r['Visitor Name'], r.City, r.State, r['Email ID'], r['Phone No.'], r['Enquiry Number'], r['Application (as recorded)'], r['ERP Lead Number']]
         .join(' ').toLowerCase();
       if(!hay.includes(q)) return false;
     }
@@ -2449,6 +2671,33 @@ function applyFilters(){
   lastFiltered = filtered;
   $('#leadsBody').innerHTML = filtered.map(r => rowHtml(r)).join('');
   wireRowEvents();
+  updateFilterCount();
+}
+
+function updateFilterCount(){
+  const filters = ['searchBox','stateFilter','cityFilter','appFilter','productFilter','statusFilter',
+    'countryFilter','companyFilter','deptFilter','contactFilter','priorityFilter','sourceFilter',
+    'leadTypeFilter','sourceProFilter','genByFilter','assignToFilter','leadValueMinFilter',
+    'leadValueMaxFilter','followUpFromFilter','followUpToFilter','receivedFromFilter','receivedToFilter'];
+  let count = 0;
+  let summaryParts = [];
+  filters.forEach(id => {
+    const el = document.getElementById(id);
+    if(el && el.value && el.value.trim()){
+      count++;
+      const label = el.previousElementSibling ? el.previousElementSibling.textContent : id;
+      summaryParts.push(label.replace(/From|To|min|max|₹/gi,'').trim());
+    }
+  });
+  const badge = document.getElementById('filterCountBadge');
+  if(badge){
+    badge.textContent = count;
+    badge.classList.toggle('empty', count === 0);
+  }
+  const summary = document.getElementById('filterSummary');
+  if(summary){
+    summary.textContent = count > 0 ? `${count} filter${count>1?'s':''} active — showing ${$('#resultCount').textContent}` : '';
+  }
 }
 
 $('#copyAllBtn').addEventListener('click', () => {
@@ -3915,6 +4164,10 @@ $('#saveAddBtn').addEventListener('click', () => {
   renderAll();
   $('#searchBox').value = ''; $('#stateFilter').value=''; $('#cityFilter').value='';
   $('#appFilter').value=''; $('#productFilter').value=''; $('#statusFilter').value='';
+  ['countryFilter','companyFilter','deptFilter','contactFilter','priorityFilter','sourceFilter',
+   'leadTypeFilter','sourceProFilter','genByFilter','assignToFilter','leadValueMinFilter',
+   'leadValueMaxFilter','followUpFromFilter','followUpToFilter','receivedFromFilter','receivedToFilter'
+  ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   applyFilters();
 });
 
@@ -6466,13 +6719,29 @@ function renderManagementPanel(){
 }
 
 // ============ Filter wiring ============
-['searchBox','stateFilter','cityFilter','appFilter','productFilter','statusFilter'].forEach(id => {
-  document.getElementById(id).addEventListener('input', applyFilters);
-  document.getElementById(id).addEventListener('change', applyFilters);
+['searchBox','stateFilter','cityFilter','appFilter','productFilter','statusFilter',
+'countryFilter','companyFilter','deptFilter','contactFilter','priorityFilter','sourceFilter',
+'leadTypeFilter','sourceProFilter','genByFilter','assignToFilter','leadValueMinFilter',
+'leadValueMaxFilter','followUpFromFilter','followUpToFilter','receivedFromFilter','receivedToFilter'
+].forEach(id => {
+  const el = document.getElementById(id);
+  if(el){
+    el.addEventListener('input', applyFilters);
+    el.addEventListener('change', applyFilters);
+  }
+});
+
+// Collapsible filter panel
+document.getElementById('filterPanelHeader').addEventListener('click', function(){
+  document.getElementById('filterPanel').classList.toggle('collapsed');
 });
 $('#clearBtn').addEventListener('click', () => {
   $('#searchBox').value = '';
-  ['stateFilter','cityFilter','appFilter','productFilter','statusFilter'].forEach(id => document.getElementById(id).value = '');
+  ['stateFilter','cityFilter','appFilter','productFilter','statusFilter',
+   'countryFilter','companyFilter','deptFilter','contactFilter','priorityFilter','sourceFilter',
+   'leadTypeFilter','sourceProFilter','genByFilter','assignToFilter','leadValueMinFilter',
+   'leadValueMaxFilter','followUpFromFilter','followUpToFilter','receivedFromFilter','receivedToFilter'
+  ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   applyFilters();
 });
 
