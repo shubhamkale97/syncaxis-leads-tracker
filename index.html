@@ -888,7 +888,7 @@
     <div class="section-head">
       <div>
         <div class="section-title">Area × Application Matrix</div>
-        <div class="section-note">Click a cell to filter the lead list below</div>
+        <div class="section-note">Click a cell to filter the lead list in the All Leads tab</div>
       </div>
       <div class="matrix-toggle" id="matrixToggle">
         <button data-mode="state" class="active">STATE</button>
@@ -2518,10 +2518,16 @@ function renderMatrix(){
       else { $('#cityFilter').value = group; $('#stateFilter').value=''; }
       $('#appFilter').value = app;
       applyFilters();
-      const sections = document.querySelectorAll('.section');
-      const lastSection = sections[sections.length-1];
-      if(lastSection && typeof lastSection.scrollIntoView === 'function'){
-        lastSection.scrollIntoView({behavior:'smooth', block:'start'});
+      // Switch to the All Leads tab so the filtered results are visible.
+      // Bootstrap tab navigation moved the lead list into its own tab; without
+      // this, clicking a matrix cell silently applies filters the user can't see.
+      var leadsTabEl = document.getElementById('tab-leads');
+      if(leadsTabEl && typeof bootstrap !== 'undefined' && bootstrap.Tab){
+        var tab = bootstrap.Tab.getInstance(leadsTabEl) || new bootstrap.Tab(leadsTabEl);
+        tab.show();
+      } else if(leadsTabEl){
+        // Bootstrap not loaded yet — fall back to a click on the tab button.
+        leadsTabEl.click();
       }
     });
   });
