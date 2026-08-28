@@ -81,3 +81,7 @@ Nobody can view real lead data just by visiting the page — it requires signing
 5. **Bumped service worker to v3** — added `logo.js` to `SHELL_FILES`, purges old v2 cache on activate.
 
 6. **Mobile enhancements** — sticky tab bar, horizontal-scrolling toolbars/filters, responsive grids, pinch-zoom enabled.
+
+## Recent Changes (2026-08-29)
+
+1. **Fixed Area × Application Matrix click → All Leads tab navigation** — clicking a matrix cell applied the State/City + Application Category filters correctly, but the result was invisible because the leads table lives in the separate "All Leads" tab (`#panel-leads`) introduced with the Bootstrap tab layout. The old `scrollIntoView` on the last `.section` no longer switched tabs. Replaced it with a Bootstrap `Tab.show()` call on `#tab-leads` (same pattern used for tab restore on page load), with a `.click()` fallback if Bootstrap's JS hasn't loaded yet. The section subtitle was also updated from "Click a cell to filter the lead list below" to "Click a cell to filter the lead list in the All Leads tab" to match the new behaviour.
