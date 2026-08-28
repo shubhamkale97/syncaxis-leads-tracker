@@ -1,0 +1,30 @@
+name: Apply Patch
+'on':
+  push:
+    branches:
+    - main
+    paths:
+    - .github/workflows/*.yml
+permissions:
+  contents: write
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: '0'
+    - name: Decode patch
+      run: echo "$PATCH_B64" | base64 -d | gunzip > fix.patch
+      env:
+        PATCH_B64: H4sICDrtkWoAA2ZpeC5wYXRjaACVkM1uwjAQhO9+irkRZJw/UhJUhACVqpV64wHaxD9gEWxkO7RSX74Jp+bW7mG1s9KM9I3QSoGxow6oE22E/IpP4dKi+SXI/cRDpUSxLOOYKzUvywxZmi6KgjDGRl5CKR37NxuwbFHMQe+7l6ozPGhr4ORR+yDdrrX8/GxddHVWdDy8mv4pfZh+E5Yk2G0P+/e3/fbpgEhI3tZOCtSNvckZtEE4SSjtfMDKc6evYY1mCJxCe1y6UDethLfoKXlt0EhC/xs6oZO/5A6oeZWnoHmVLWfpGNZ+vvR9RG6gQj+rJLj1xyP5AVSXFnCGAQAA
+    - name: Apply patch
+      run: git apply --unidiff-zero fix.patch
+    - name: Commit
+      run: 'git config user.name "github-actions[bot]" && git config user.email "github-actions[bot]@users.noreply.github.com" && git add -A && git commit -m "fix: remove duplicate </tr> line and escape <script> in JS comment that broke sign-in"'
+    - name: Remove workflow and patch files
+      run: git rm -f .github/workflows/apply-patch.yml fix.patch
+    - name: Push
+      run: git push
