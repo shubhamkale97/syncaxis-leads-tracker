@@ -1,0 +1,83 @@
+diff --git a/index.html b/index.html
+index 1554fda..85b4402 100644
+--- a/index.html
++++ b/index.html
+@@ -283,13 +283,13 @@
+   .btn-primary:hover{ color: #fff; border-color: var(--amber); }
+ 
+   .table-scroll{ overflow-x:auto; margin-top:14px; border:1px solid var(--line); border-radius:8px; max-height: 560px; overflow-y:auto;}
+-  table.leads{ border-collapse:collapse; width:100%; font-size:12px; min-width: 1500px; }
++  table.leads{ border-collapse:collapse; width:100%; font-size:12px; min-width: 3600px; }
+   table.leads th{
+     position:sticky; top:0; background: var(--panel-2); text-align:left; padding:9px 8px;
+     font-family: var(--font-mono); font-size:10px; color: var(--text-dim); text-transform:uppercase; letter-spacing:.04em;
+     border-bottom:1px solid var(--line); z-index: 1; white-space:nowrap;
+   }
+-  table.leads td{ padding:5px 8px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
++  table.leads td{ padding:7px 10px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
+   table.leads tr:hover td{ background: rgba(255,255,255,0.02); }
+   /* Pin the Edit column to the right edge on desktop. The table is ~30 columns wide,
+      so an edit affordance that only appears after scrolling all the way right is
+@@ -430,7 +430,7 @@
+      Master .mgmt-overlay (z-index:210), so it has to stack above that too. */
+   #importModal{ z-index:250; }
+   .modal{
+-    display:block;
++    display:block; position:relative; top:auto; left:auto; height:auto; margin:auto;
+     background: var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px 24px; width:100%; max-width: 560px;
+     max-height: 86vh; overflow-y:auto;
+   }
+@@ -1028,6 +1028,14 @@
+     </div>
+     <div class="table-scroll">
+       <table class="leads">
++        <colgroup>
++          <col style="width:50px"><col style="width:120px"><col style="width:150px"><col style="width:90px"><col style="width:110px"><col style="width:140px"><col style="width:110px"><col style="width:110px"><col style="width:120px">
++          <col style="width:150px"><col style="width:130px"><col style="width:190px"><col style="width:130px">
++          <col style="width:130px"><col style="width:110px"><col style="width:110px"><col style="width:110px"><col style="width:140px">
++          <col style="width:110px"><col style="width:130px"><col style="width:130px"><col style="width:80px"><col style="width:120px">
++          <col style="width:130px"><col style="width:100px"><col style="width:100px"><col style="width:130px"><col style="width:130px">
++          <col style="width:140px"><col style="width:70px">
++        </colgroup>
+         <thead>
+           <tr>
+             <th>Sr. No.</th><th>Enquiry No</th><th>Company</th><th>Customer ID</th><th>Department</th><th>Contact Person Name</th><th>State</th><th>City</th><th>Country</th>
+@@ -2768,31 +2776,31 @@ function rowHtml(r){
+           </select></td>
+       <td data-label="Email"><input class="cell-input" type="email" data-field="Email ID" value="${(r['Email ID']||'').replace(/"/g,'"')}" placeholder="—" title="${(r['Email ID']||'').replace(/"/g,'"')}" style="min-width:190px;"></td>
+       <td data-label="Phone"><input class="cell-input" type="tel" data-field="Phone No." value="${(r['Phone No.']||'').replace(/"/g,'"')}" placeholder="—" title="${(r['Phone No.']||'').replace(/"/g,'"')}" style="min-width:130px;"></td>
+-      <td data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status">
++      <td data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status" style="min-width:120px;">
+             ${STATUS_OPTIONS.map(s=>`<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
+           </select></td>
+-      <td data-label="Priority"><select class="cell-input" data-field="Lead Quality">
++      <td data-label="Priority"><select class="cell-input" data-field="Lead Quality" style="min-width:110px;">
+             <option value="" ${!r['Lead Quality']?'selected':''}>—</option>
+             ${LEAD_QUALITY_OPTIONS.map(q=>`<option value="${q}" ${q===r['Lead Quality']?'selected':''}>${q}</option>`).join('')}
+           </select></td>
+-      <td data-label="Source"><select class="cell-input" data-field="Inquiry Source">
++      <td data-label="Source"><select class="cell-input" data-field="Inquiry Source" style="min-width:110px;">
+             <option value="" ${!r['Inquiry Source']?'selected':''}>—</option>
+             ${INQUIRY_SOURCE_OPTIONS.map(s=>`<option value="${s}" ${s===r['Inquiry Source']?'selected':''}>${s}</option>`).join('')}
+           </select></td>
+-      <td data-label="Lead Type"><select class="cell-input" data-field="Lead Type">
++      <td data-label="Lead Type"><select class="cell-input" data-field="Lead Type" style="min-width:110px;">
+             <option value="" ${!r['Lead Type']?'selected':''}>—</option>
+             ${LEAD_TYPE_OPTIONS.map(s=>`<option value="${s}" ${s===r['Lead Type']?'selected':''}>${s}</option>`).join('')}
+           </select></td>
+-      <td data-label="Moved to SourcePro"><select class="cell-input" data-field="Moved to SourcePro">
++      <td data-label="Moved to SourcePro"><select class="cell-input" data-field="Moved to SourcePro" style="min-width:130px;">
+             <option value="" ${!r['Moved to SourcePro']?'selected':''}>—</option>
+             ${SOURCEPRO_OPTIONS.map(s=>`<option value="${s}" ${s===r['Moved to SourcePro']?'selected':''}>${s}</option>`).join('')}
+           </select></td>
+       <td data-label="Lead Value (₹)"><div class="lead-value-cell"><span class="inr-prefix">₹</span><input class="cell-input" type="text" inputmode="numeric" data-field="Lead Value" value="${formatINR(r['Lead Value'])}" placeholder="0"></div></td>
+-      <td data-label="Generated By"><select class="cell-input" data-field="Lead Generated By">
++      <td data-label="Generated By"><select class="cell-input" data-field="Lead Generated By" style="min-width:120px;">
+             <option value="" ${!r['Lead Generated By']?'selected':''}>—</option>
+             ${generatedByOptionsHtml(r['Lead Generated By'])}
+           </select></td>
+-      <td data-label="Assigned To"><select class="cell-input" data-field="Enquiry Assigned To">
++      <td data-label="Assigned To"><select class="cell-input" data-field="Enquiry Assigned To" style="min-width:120px;">
+             <option value="" ${!r['Enquiry Assigned To']?'selected':''}>—</option>
+             ${generatedByOptionsHtml(r['Enquiry Assigned To'])}
+           </select></td>
