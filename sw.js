@@ -7,8 +7,8 @@
 // for genuinely offline use (mirroring the app's own existing offline-banner /
 // localStorage-fallback philosophy), never as the primary source when online.
 
-const CACHE_NAME = 'syncaxis-leads-shell-v2';
-const SHELL_FILES = ['./', './index.html', './manifest.json'];
+const CACHE_NAME = 'syncaxis-leads-shell-v3';
+const SHELL_FILES = ['./', './index.html', './manifest.json', './bootstrap.min.css', './bootstrap.bundle.min.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
