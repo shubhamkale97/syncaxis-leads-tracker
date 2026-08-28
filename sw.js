@@ -8,7 +8,7 @@
 // localStorage-fallback philosophy), never as the primary source when online.
 
 const CACHE_NAME = 'syncaxis-leads-shell-v3';
-const SHELL_FILES = ['./', './index.html', './manifest.json'];
+const SHELL_FILES = ['./', './index.html', './manifest.json', './logo.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
