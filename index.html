@@ -1640,7 +1640,7 @@ function registerBlockFor(productInterest){
   return (s.includes('dobot') && !s.includes('rexroth')) ? 'dobot' : 'rexroth';
 }
 
-// BASE_LEADS (declared above, in the first <script> block) is mutable so it can be
+// BASE_LEADS (declared above, in the first <scr'+'ipt> block) is mutable so it can be
 // overwritten by the live Firestore sync below (see startRealtimeSync) — once the
 // seed dataset has been migrated into Firestore (Super Admin panel → "Migrate Seed
 // Data"), the PUBLIC deployment of this file ships with that literal array emptied
@@ -2816,7 +2816,6 @@ function rowHtml(r){
       <td data-label="Order Date"><input class="cell-input" type="date" data-field="Order Date" value="${r['Order Date']||''}" style="min-width:130px;"></td>
       <td data-label="Enquiry Received Date"><input class="cell-input" type="date" data-field="Received Date" value="${r['Received Date']||''}" style="min-width:130px;"></td>
       <td data-label="Edit"><button class="btn btn-small lead-edit-btn" data-sr="${r['Sr.no']}" title="Open the full edit form for this lead">&#9998; Edit</button></td>
-    </tr>`;
     </tr>`;
 }
 
