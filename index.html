@@ -5036,6 +5036,34 @@ async function renderSuperAdminPanel(){
       <div id="registerImportPreview"></div>
     </div>`;
 
+  const backupRestoreSection = `
+    <div class="mgmt-section" style="border-color:var(--accent, var(--blue));">
+      <div class="mgmt-section-title">🗄 Backup &amp; Restore</div>
+      <div class="section-note" style="margin-bottom:14px;">
+        ${boardHasBaseLeads
+          ? 'Your original seed leads live <b>only in Firestore</b> now — they are no longer embedded in the deployed page, so GitHub does not have a copy of them. This is the safety net.'
+          : 'Everything added or changed since this dashboard went live — every lead, customer, note and dropdown option — lives only in Firestore, not in GitHub. This is the safety net.'}
+        Download a full copy periodically (weekly is reasonable) and keep it somewhere private — never in the public GitHub repo, since it contains real customer data.
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <button class="btn btn-primary" id="downloadBackupBtn">⬇ Download Full Backup</button>
+        <div class="section-note" id="backupStatus" style="margin-top:8px;"></div>
+      </div>
+
+      <div style="padding-top:14px; border-top:1px solid var(--line);">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;"><b>Restore from a backup file</b></div>
+        <div class="section-note" style="margin-bottom:8px;">
+          For disaster recovery — e.g. this Firebase project was wiped or you're standing up a replacement.
+          This replaces every lead, customer, note and dropdown option with what's in the file.
+          <b>User accounts and roles are included in the downloaded file for reference, but are not restored by this button</b> —
+          re-add teammates with "Add a New User" below; their sign-in is a separate system (Firebase Authentication) that a data restore can't recreate.
+        </div>
+        <input type="file" id="restoreFileInput" accept=".json" style="max-width:320px;">
+        <div id="restoreStatus" style="margin-top:10px;"></div>
+      </div>
+    </div>`;
+
   const dataGovernanceSection = `
     <div class="mgmt-section">
       <div class="mgmt-section-title">🔐 Data Governance &amp; Audit</div>
@@ -5079,6 +5107,7 @@ async function renderSuperAdminPanel(){
 
   content.innerHTML = `
     ${migrationBanner}
+    ${backupRestoreSection}
     ${dropdownOptionsSection}
     ${dataGovernanceSection}
     ${leadSourceBackfillSection}
@@ -5396,6 +5425,15 @@ async function renderSuperAdminPanel(){
     renderSuperAdminPanel();
   });
 
+  const downloadBackupBtn = $('#downloadBackupBtn');
+  if(downloadBackupBtn) downloadBackupBtn.addEventListener('click', downloadFullBackup);
+
+  const restoreFileInput = $('#restoreFileInput');
+  if(restoreFileInput) restoreFileInput.addEventListener('change', () => {
+    const file = restoreFileInput.files && restoreFileInput.files[0];
+    if(file) parseAndPreviewRestoreFile(file);
+  });
+
   const migrateLogBtn = $('#migrateActivityLogBtn');
   if(migrateLogBtn) migrateLogBtn.addEventListener('click', async () => {
     const status = $('#migrateActivityLogStatus');
@@ -5673,6 +5711,7 @@ const NEVER_PRUNE_LOG_ACTIONS = new Set([
   'add-user', 'change-role', 'change-scope', 'enable-user', 'disable-user',
   'change-permission', 'change-view-filter', 'reset-password',
   'import-leads', 'bulk-renumber-leads', 'migrate-seed-data',
+  'restore-backup',
 ]);
 // Retention window in days for prunable entries, on top of the count cap. GDPR
 // Art. 5(1)(e) storage limitation: personal data (these entries contain names, emails
@@ -6348,6 +6387,7 @@ function activityActionLabel(action){
     'add-option': 'Added dropdown option', 'reset-password': 'Sent password reset',
     'export-data': 'Exported data', 'autofill-enquiry-numbers': 'Auto-filled Enquiry Numbers',
     'bulk-set-source': 'Bulk-set Inquiry Source', 'migrate-seed-data': 'Migrated seed data',
+    'restore-backup': 'Restored from backup',
   }[action] || action;
 }
 // Loads the audit log from its own collection. Super Admin only -- for anyone else
@@ -6383,6 +6423,160 @@ async function loadActivityLogFromCollection(){
 // data actually lives -- the audit log, lead attribution fields, and note authorship --
 // rather than only the obvious one, since an incomplete SAR response is itself a
 // compliance failure.
+// ============ Full data backup & restore ============
+// The single most important safety net in this app. baseLeads (the original seed
+// dataset) now lives ONLY in Firestore -- it was deliberately removed from this
+// public HTML file so real customer data would stop being committed to a public
+// GitHub repo (see the migration banner). That means git no longer backs it up at
+// all: if this Firestore project were ever wiped, corrupted, or deleted, the leads
+// would be gone with no other copy anywhere. This section is that copy.
+const BACKUP_SCHEMA_VERSION = 1;
+// Every field this app actually writes to the shared board document. Named once so
+// the backup, the restore payload, and the mergeFields list can never drift apart --
+// if a new mutable field is ever added to the board doc, it needs to be added here
+// too or it silently won't be backed up, which is a worse failure than a loud one.
+const BOARD_BACKUP_FIELDS = ['baseLeads','edits','newLeads','editMeta','noteLogs','customerMaster','customerIdCounter','customAppCategories','customInquirySources','customStates','customCities','customCountries'];
+
+async function buildFullBackupBundle(){
+  // Read the board doc FRESH from Firestore rather than from in-memory state.
+  // customerIdCounter in particular is never mirrored into a local JS variable at
+  // all, and a backup is only trustworthy if it reflects exactly what the database
+  // holds right now, not what this browser tab happened to have cached.
+  const boardSnap = await fb.getDoc(boardRef);
+  const board = boardSnap.exists() ? boardSnap.data() : {};
+  const bundle = {
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    exportedBy: currentUser || '',
+    firebaseProjectId: (FIREBASE_CONFIG && FIREBASE_CONFIG.projectId) || '',
+    board: {},
+  };
+  BOARD_BACKUP_FIELDS.forEach(k => {
+    bundle.board[k] = board[k] != null ? board[k] : (k === 'customerIdCounter' ? 0 : (Array.isArray(board[k]) || k === 'baseLeads' ? [] : {}));
+  });
+
+  // Everything below is Super-Admin-only data. Included so nothing is truly lost,
+  // but NOT one-click restorable here -- see the note in the Restore UI for why.
+  if(isSuperAdmin()){
+    try{
+      const snap = await fb.getDocs(fb.collection(fb.db, USERS_COLLECTION));
+      const users = {};
+      snap.forEach(d => { users[d.id] = d.data(); });
+      bundle.users = users;
+    }catch(err){ bundle.usersError = err.message; }
+    try{
+      const snap = await fb.getDocs(fb.collection(fb.db, TEAM_DIRECTORY_COLLECTION));
+      const dir = {};
+      snap.forEach(d => { dir[d.id] = d.data(); });
+      bundle.teamDirectory = dir;
+    }catch(err){ bundle.teamDirectoryError = err.message; }
+    try{
+      const snap = await fb.getDocs(fb.collection(fb.db, ACTIVITY_LOG_COLLECTION));
+      const log = {};
+      snap.forEach(d => {
+        const v = d.data() || {};
+        log[d.id] = Object.assign({}, v, { at: v.at && v.at.toMillis ? v.at.toMillis() : (v.at || null) });
+      });
+      bundle.activityLog = log;
+    }catch(err){ bundle.activityLogError = err.message; }
+  }
+  return bundle;
+}
+
+async function downloadFullBackup(){
+  if(!isSuperAdmin()){ showToast('Only a Super Admin can run a full backup.', 'error'); return; }
+  const btn = $('#downloadBackupBtn'), status = $('#backupStatus');
+  const say = msg => { if(status) status.innerHTML = msg; };
+  if(btn) btn.disabled = true;
+  say('Reading everything from Firestore…');
+  try{
+    const bundle = await buildFullBackupBundle();
+    const json = JSON.stringify(bundle, null, 2);
+    const blob = new Blob([json], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.href = url; a.download = `syncaxis-full-backup-${stamp}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    const leadCount = bundle.board.baseLeads.length + Object.keys(bundle.board.newLeads).length;
+    const custCount = Object.keys(bundle.board.customerMaster).length;
+    const userCount = bundle.users ? Object.keys(bundle.users).length : 0;
+    say(`Downloaded — <b>${leadCount}</b> leads, <b>${custCount}</b> customers, <b>${userCount}</b> user accounts (for reference). Keep this file somewhere private — never in the public GitHub repo.`);
+    logActivity('export-data', `Full data backup downloaded (${leadCount} leads, ${custCount} customers)`, { kind: 'full-backup', leadCount, custCount });
+  }catch(err){
+    say(`<span style="color:var(--red-fg);">Backup failed: ${escapeHtml(err.message)}</span>`);
+  }
+  if(btn) btn.disabled = false;
+}
+
+let restoreParsedBundle = null;
+function parseAndPreviewRestoreFile(file){
+  const status = $('#restoreStatus');
+  if(!status) return;
+  status.innerHTML = 'Reading…';
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try{ parsed = JSON.parse(reader.result); }
+    catch(err){ status.innerHTML = `<span style="color:var(--red-fg);">That's not a valid backup file: ${escapeHtml(err.message)}</span>`; return; }
+    if(!parsed || typeof parsed.board !== 'object'){
+      status.innerHTML = `<span style="color:var(--red-fg);">That file doesn't look like a Syncaxis backup — no "board" section found.</span>`;
+      return;
+    }
+    restoreParsedBundle = parsed;
+    const b = parsed.board;
+    const leadCount = (b.baseLeads || []).length + Object.keys(b.newLeads || {}).length;
+    const custCount = Object.keys(b.customerMaster || {}).length;
+    const noteCount = Object.values(b.noteLogs || {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.length : 0), 0);
+    status.innerHTML = `
+      <div class="section-note" style="margin-bottom:8px;">
+        Backup from <b>${escapeHtml(parsed.exportedAt || 'an unknown date')}</b>, taken by <b>${escapeHtml(parsed.exportedBy || 'someone unrecorded')}</b>.<br>
+        Contains <b>${leadCount}</b> leads, <b>${custCount}</b> customers, <b>${noteCount}</b> follow-up notes.
+      </div>
+      <div class="section-note" style="border-left:3px solid var(--red); padding:10px 14px; margin-bottom:10px; background:var(--panel-2);">
+        <b>This REPLACES every current lead, customer, note and dropdown option with what's in this file.</b>
+        Anything added or changed since this backup was taken will be lost. This cannot be undone.
+      </div>
+      <div class="form-field" style="margin-bottom:8px;"><label>Type RESTORE to confirm</label><input type="text" id="restoreConfirmInput" placeholder="RESTORE" autocomplete="off"></div>
+      <button class="btn" id="restoreConfirmBtn" style="border-color:var(--red); color:var(--red-fg);" disabled>Restore This Backup</button>`;
+    const input = $('#restoreConfirmInput'), confirmBtn = $('#restoreConfirmBtn');
+    input.addEventListener('input', () => { confirmBtn.disabled = input.value.trim() !== 'RESTORE'; });
+    confirmBtn.addEventListener('click', () => commitRestore(restoreParsedBundle));
+  };
+  reader.onerror = () => { status.innerHTML = `<span style="color:var(--red-fg);">Could not read that file.</span>`; };
+  reader.readAsText(file);
+}
+
+async function commitRestore(parsed){
+  if(!isSuperAdmin()){ showToast('Only a Super Admin can restore a backup.', 'error'); return; }
+  const btn = $('#restoreConfirmBtn'), status = $('#restoreStatus');
+  if(btn) btn.disabled = true;
+  const say = msg => { if(status) status.insertAdjacentHTML('beforeend', `<div class="section-note" style="margin-top:8px;">${msg}</div>`); };
+  say('Restoring…');
+  try{
+    const b = parsed.board;
+    const payload = {};
+    BOARD_BACKUP_FIELDS.forEach(k => {
+      payload[k] = b[k] != null ? b[k] : (k === 'customerIdCounter' ? 0 : (k === 'baseLeads' ? [] : {}));
+    });
+    payload.lastUpdatedBy = currentUser || 'Restore';
+    payload.lastUpdatedAt = fb.serverTimestamp();
+    // mergeFields naming every field explicitly -- not a plain object write, and not
+    // plain merge:true -- so this is a full wholesale replace of exactly these fields
+    // and nothing else on the document. Same reasoning as the viewFilter save fix
+    // earlier: be explicit about which fields a write is allowed to touch rather than
+    // trusting a merge default.
+    await fb.setDoc(boardRef, payload, { mergeFields: Object.keys(payload) });
+    await logActivity('restore-backup', `Restored full data from a backup dated ${parsed.exportedAt || 'an unknown date'} (taken by ${parsed.exportedBy || 'someone unrecorded'})`, { backupDate: parsed.exportedAt || '' });
+    say('<b style="color:var(--green);">Done — reloading…</b>');
+    setTimeout(() => location.reload(), 1200);
+  }catch(err){
+    say(`<span style="color:var(--red-fg);">Restore failed: ${escapeHtml(err.message)}</span>`);
+    if(btn) btn.disabled = false;
+  }
+}
+
 async function buildPersonDataBundle(person){
   const target = person.trim().toLowerCase();
   await loadActivityLogFromCollection();
