@@ -1376,6 +1376,11 @@ document.querySelectorAll('.brand-logo').forEach(img => { img.src = LOGO_DATA_UR
 //          // A user can be delegated (via canManageOptions on their own /users doc) to add
 //          // Country/State/City/Application Category/Inquiry Source dropdown options on the
 //          // superadmin's behalf -- WITHOUT being superadmin and WITHOUT touching lead data.
+//          // customStatusOptions is deliberately NOT listed here (unlike the other five
+//          // custom-option fields) -- Status options are superadmin-only, no delegation.
+//          // canWrite() below still lets a superadmin write it, via the unconditional
+//          // isSuperAdmin() clause; a delegated-but-not-superadmin user writing it fails
+//          // isOptionFieldsOnly() (the field isn't in this hasOnly list) and so is rejected.
 //          function isOptionFieldsOnly() { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customAppCategories','customInquirySources','customStates','customCities','customCountries','lastUpdatedBy','lastUpdatedAt']); }
 //          function canManageOptions() { return isSuperAdmin() || (isActive() && myRoleDoc().data.canManageOptions == true); }
 //          function canWrite() {
@@ -1515,7 +1520,14 @@ function parseINR(v){
   return { value: num, error: null };
 }
 const STORAGE_KEY = 'exhibition-overrides';      // local (this browser only) fallback
-const STATUS_OPTIONS = ['Not Contacted','Contacted','Meeting Scheduled','Quotation Sent','Won','Lost','Not Relevant'];
+const BASE_STATUS_OPTIONS = ['Not Contacted','Contacted','Meeting Scheduled','Quotation Sent','Won','Lost','Not Relevant'];
+// Mutated in place (never reassigned) so every place that captured a reference to it
+// (the status <select> in the table, the Add Lead form, the status filter, the Excel
+// import normalizer) sees superadmin-added custom statuses too, once synced from
+// Firestore -- same pattern as INQUIRY_SOURCE_OPTIONS below. Deliberately NOT
+// delegable via canManageOptions like the other custom-option fields: see
+// CUSTOM_STATUS_OPTIONS and addCustomOption's isSuperAdmin() check.
+let STATUS_OPTIONS = BASE_STATUS_OPTIONS.slice();
 const CARD_OPTIONS = ['Yes','No','Photo Only','Not Recorded'];
 const PRODUCT_OPTIONS = ['Dobot','Rexroth','Dobot + Rexroth','Vision System','Not Specified'];
 const LEAD_QUALITY_OPTIONS = ['🔥 Hot','🌤 Warm','❄️ Cold']; // shown to users as "Priority"
@@ -1541,15 +1553,20 @@ const BASE_INQUIRY_SOURCE_OPTIONS = ['Exhibition Booth','Website','Phone Call','
 let INQUIRY_SOURCE_OPTIONS = BASE_INQUIRY_SOURCE_OPTIONS.slice();
 let CUSTOM_APP_CATS = []; // superadmin-added Application Categories, merged into APP_CATS
 let CUSTOM_STATES = [], CUSTOM_CITIES = [], CUSTOM_COUNTRIES = []; // superadmin-added, merged into STATE/CITY/COUNTRY_OPTIONS
+let CUSTOM_STATUS_OPTIONS = []; // superadmin-ONLY (not delegable) additions, merged into STATUS_OPTIONS
 function applyCustomOptions(data){
   const customApp = Array.isArray(data.customAppCategories) ? data.customAppCategories : [];
   const customSrc = Array.isArray(data.customInquirySources) ? data.customInquirySources : [];
+  const customStatus = Array.isArray(data.customStatusOptions) ? data.customStatusOptions : [];
   CUSTOM_APP_CATS.length = 0; CUSTOM_APP_CATS.push(...customApp);
   INQUIRY_SOURCE_OPTIONS.length = 0;
   INQUIRY_SOURCE_OPTIONS.push(...BASE_INQUIRY_SOURCE_OPTIONS, ...customSrc.filter(s => !BASE_INQUIRY_SOURCE_OPTIONS.includes(s)));
   CUSTOM_STATES.length = 0; CUSTOM_STATES.push(...(Array.isArray(data.customStates) ? data.customStates : []));
   CUSTOM_CITIES.length = 0; CUSTOM_CITIES.push(...(Array.isArray(data.customCities) ? data.customCities : []));
   CUSTOM_COUNTRIES.length = 0; CUSTOM_COUNTRIES.push(...(Array.isArray(data.customCountries) ? data.customCountries : []));
+  CUSTOM_STATUS_OPTIONS.length = 0; CUSTOM_STATUS_OPTIONS.push(...customStatus);
+  STATUS_OPTIONS.length = 0;
+  STATUS_OPTIONS.push(...BASE_STATUS_OPTIONS, ...customStatus.filter(s => !BASE_STATUS_OPTIONS.includes(s)));
 }
 // State/City/Country dropdown options = every value already seen in the data, plus
 // anything the superadmin (or a delegated user) has added ahead of time. Mutated in
@@ -5633,7 +5650,13 @@ async function renderSuperAdminPanel(){
 }
 
 async function addCustomOption(inputId, fieldName){
-  if(!canManageOptionsUI()){ showToast("You don't have permission to manage dropdown options.", 'error'); return; }
+  // Status is the one option field that stays superadmin-only -- everything else here
+  // is delegable via canManageOptions. Checked here (not just by hiding the Status
+  // section's markup for non-superadmins) so a delegated manager can't add one by
+  // calling this directly; Firestore rules reject it either way (see isOptionFieldsOnly
+  // in the rules reference comment above), this is just the honest client-side mirror.
+  const allowed = fieldName === 'customStatusOptions' ? isSuperAdmin() : canManageOptionsUI();
+  if(!allowed){ showToast("You don't have permission to manage dropdown options.", 'error'); return; }
   const input = $('#' + inputId);
   const val = input.value.trim();
   if(!val) return;
@@ -5643,7 +5666,7 @@ async function addCustomOption(inputId, fieldName){
     // Delegable to non-superadmins and permanent/team-wide once added, so it belongs
     // in the audit trail. Field name is mapped to something readable rather than
     // dumping the raw Firestore key.
-    const optionLabel = { customAppCategories:'Application Category', customInquirySources:'Inquiry Source', customCountries:'Country', customStates:'State', customCities:'City' }[fieldName] || fieldName;
+    const optionLabel = { customAppCategories:'Application Category', customInquirySources:'Inquiry Source', customCountries:'Country', customStates:'State', customCities:'City', customStatusOptions:'Status' }[fieldName] || fieldName;
     logActivity('add-option', `${optionLabel}: "${val}"`, { field: fieldName });
     renderOptionsManagerPanel();
   }catch(err){ showToast('Could not add option: ' + err.message, 'error'); }
@@ -5652,7 +5675,10 @@ async function addCustomOption(inputId, fieldName){
 // ============ Manage Dropdown Options — superadmin, or anyone delegated via
 // canManageOptions on their user record. Deliberately its own small panel (not part
 // of the full Super Admin panel) so a delegated non-superadmin only ever sees this,
-// never user management, seed migration, etc. ============
+// never user management, seed migration, etc. Status is the one exception: it's
+// superadmin-only with no delegation (see addCustomOption / renderOptionsManagerPanel),
+// since Follow-Up Status drives KPIs, charts and the Follow-Up tab, so its option set
+// is deliberately harder to change than a plain lookup list like Country or City. ============
 function renderOptionsManagerPanel(){
   const content = $('#optionsManagerContent');
   const field = (label, placeholder, inputId, btnId, currentList) => `
@@ -5666,12 +5692,20 @@ function renderOptionsManagerPanel(){
     </div>`;
   content.innerHTML = `
     <div class="section-note" style="margin-bottom:16px;">Anything added here shows up in the matching dropdown for the whole team immediately — no code changes, no redeploy.</div>
+    ${isSuperAdmin() ? field('Status 🔒 Super Admin only', 'e.g. On Hold', 'newStatusInput', 'addStatusBtn', CUSTOM_STATUS_OPTIONS) : ''}
     ${field('Application Category', 'e.g. Robotic Welding', 'newAppCatInput', 'addAppCatBtn', CUSTOM_APP_CATS)}
     ${field('Inquiry Source', 'e.g. Trade Magazine', 'newSourceInput', 'addSourceBtn', INQUIRY_SOURCE_OPTIONS.filter(s=>!BASE_INQUIRY_SOURCE_OPTIONS.includes(s)))}
     ${field('Country', 'e.g. United Arab Emirates', 'newCountryInput', 'addCountryBtn', CUSTOM_COUNTRIES)}
     ${field('State', 'e.g. Ladakh', 'newStateInput', 'addStateBtn', CUSTOM_STATES)}
     ${field('City', 'e.g. Nagpur', 'newCityInput', 'addCityBtn', CUSTOM_CITIES)}
   `;
+  // Status is superadmin-only (see addCustomOption) -- delegated (non-superadmin)
+  // managers who can still open this whole panel for the other five fields never get
+  // this section's markup at all, not just a disabled button.
+  if(isSuperAdmin()){
+    $('#addStatusBtn').addEventListener('click', () => addCustomOption('newStatusInput', 'customStatusOptions'));
+    $('#newStatusInput').addEventListener('keydown', e => { if(e.key === 'Enter') addCustomOption('newStatusInput', 'customStatusOptions'); });
+  }
   $('#addAppCatBtn').addEventListener('click', () => addCustomOption('newAppCatInput', 'customAppCategories'));
   $('#addSourceBtn').addEventListener('click', () => addCustomOption('newSourceInput', 'customInquirySources'));
   $('#addCountryBtn').addEventListener('click', () => addCustomOption('newCountryInput', 'customCountries'));
@@ -6518,7 +6552,7 @@ const BACKUP_SCHEMA_VERSION = 1;
 // the backup, the restore payload, and the mergeFields list can never drift apart --
 // if a new mutable field is ever added to the board doc, it needs to be added here
 // too or it silently won't be backed up, which is a worse failure than a loud one.
-const BOARD_BACKUP_FIELDS = ['baseLeads','edits','newLeads','editMeta','noteLogs','customerMaster','customerIdCounter','customAppCategories','customInquirySources','customStates','customCities','customCountries'];
+const BOARD_BACKUP_FIELDS = ['baseLeads','edits','newLeads','editMeta','noteLogs','customerMaster','customerIdCounter','customAppCategories','customInquirySources','customStates','customCities','customCountries','customStatusOptions'];
 
 async function buildFullBackupBundle(){
   // Read the board doc FRESH from Firestore rather than from in-memory state.
