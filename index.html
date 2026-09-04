@@ -19,9 +19,16 @@
 <meta name="apple-mobile-web-app-title" content="Syncaxis Leads">
 <meta name="mobile-web-app-capable" content="yes">
 
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://www.gstatic.com" crossorigin><link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js"><link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://www.gstatic.com" crossorigin><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js"><link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js"><link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<!-- Bootstrap CSS only styles the 3-tab nav (which sits behind the sign-in gate on
+     first load) — it doesn't need to block the page's first paint. Loaded as a
+     non-blocking preload that swaps to a stylesheet once fetched, so the sign-in
+     screen (styled entirely by the local <style> block below) shows immediately
+     instead of waiting on this CDN round-trip. -->
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" as="style">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"></noscript>
 <style>
   :root{
     --bg: #12151b;
@@ -284,13 +291,28 @@
 
   .table-scroll{ overflow-x:auto; margin-top:14px; border:1px solid var(--line); border-radius:8px; max-height: 560px; overflow-y:auto;}
   table.leads{ border-collapse:collapse; width:100%; font-size:12px; min-width: 3600px; }
+  /* Compact view drops to 10 columns — the 3600px min-width above (sized for all 30)
+     would otherwise leave a huge empty gap after them, so let it shrink to fit. */
+  table.leads.compact-view{ min-width: 0; }
   table.leads th{
     position:sticky; top:0; background: var(--panel-2); text-align:left; padding:9px 8px;
     font-family: var(--font-mono); font-size:10px; color: var(--text-dim); text-transform:uppercase; letter-spacing:.04em;
     border-bottom:1px solid var(--line); z-index: 1; white-space:nowrap;
   }
-  table.leads td{ padding:7px 10px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
-  table.leads tr:hover td{ background: rgba(255,255,255,0.02); }
+  table.leads td{ padding:9px 10px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
+  table.leads tbody tr:nth-child(even) td{ background: rgba(255,255,255,0.015); }
+  table.leads tr:hover td{ background: rgba(255,255,255,0.035); }
+  /* A thin colour accent on the leftmost cell, keyed to the row's Follow-Up Status
+     (set as a CSS variable on the <tr> — see status-row-* below), so a lead's status
+     is scannable at a glance without reading the Status cell itself. */
+  table.leads td:first-child{ border-left:3px solid var(--row-accent, transparent); }
+  tr.status-row-Not-Contacted{ --row-accent: var(--text-faint); }
+  tr.status-row-Contacted{ --row-accent: var(--blue); }
+  tr.status-row-Meeting-Scheduled{ --row-accent: var(--amber); }
+  tr.status-row-Quotation-Sent{ --row-accent: var(--purple); }
+  tr.status-row-Won{ --row-accent: var(--green); }
+  tr.status-row-Lost{ --row-accent: var(--red); }
+  tr.status-row-Not-Relevant{ --row-accent: var(--text-faint); }
   /* Pin the Edit column to the right edge on desktop. The table is ~30 columns wide,
      so an edit affordance that only appears after scrolling all the way right is
      effectively invisible from where the mistake is actually spotted. Scoped above
@@ -357,7 +379,9 @@
     table.leads tr{
       display:block; background: var(--panel); border:1px solid var(--line); border-radius:10px;
       margin-bottom:12px; padding:4px 12px 8px;
+      border-left:3px solid var(--row-accent, var(--line)); /* status colour, matches the desktop row accent */
     }
+    table.leads td:first-child{ border-left:none; } /* avoid doubling the accent — the card itself carries it on mobile */
     table.leads td{
       display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line-soft);
       text-align:right;
@@ -386,6 +410,14 @@
   }
 
   .status-pill{ font-size:10.5px; }
+  /* Status pills: background/border derive from currentColor (color-mix), so each
+     status-Xxx rule below only has to set one color and the chip look follows —
+     plain colored text was easy to miss scanning a 30-column table; a filled chip isn't. */
+  select.cell-input[class*="status-"]{
+    border-radius:20px; font-weight:600; padding:5px 10px 5px 12px;
+    background-color: color-mix(in srgb, currentColor 16%, var(--panel-2));
+    border-color: color-mix(in srgb, currentColor 35%, transparent);
+  }
   select.status-Not-Contacted{ color: var(--text-faint); }
   select.status-Contacted{ color: var(--blue); }
   select.status-Meeting-Scheduled{ color: var(--amber); }
@@ -393,6 +425,18 @@
   select.status-Won{ color: var(--green); }
   select.status-Lost{ color: var(--red); }
   select.status-Not-Relevant{ color: var(--text-faint); }
+
+  /* ===== All Leads toolbar & compact-column-view toggle ===== */
+  .toolbar-divider{ width:1px; align-self:stretch; background:var(--line); margin:2px 2px; flex:0 0 auto; }
+  #compactViewToggle.active{
+    background: var(--blue-dim); border-color: var(--blue); color: var(--blue-fg);
+  }
+  table.leads.compact-view col:not(.col-compact){ display:none; }
+  table.leads.compact-view th:not(.col-compact),
+  table.leads.compact-view td:not(.col-compact){ display:none; }
+  @media (max-width:760px){
+    table.leads.compact-view tr{ padding-bottom:4px; }
+  }
 
   .tag{ display:inline-block; padding:2px 7px; border-radius:20px; font-size:10.5px; font-family: var(--font-mono); white-space:nowrap; }
   .tag-dobot{ background: var(--amber-dim); color: var(--amber-fg); }
@@ -922,11 +966,15 @@
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
         <span class="result-count" id="resultCount"></span>
+        <button class="btn" id="compactViewToggle" title="Show only Sr No, Enquiry No, Customer, Application, Notes, Status, Generated By, Assigned To and Contact Person">📐 Compact View</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
         <button class="btn" id="saveNowBtn" title="Immediately commit whatever field you're currently editing, instead of waiting for it to autosave">💾 Save Now</button>
         <button class="btn" id="copyAllBtn">📋 COPY ALL DRAFTS</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
         <button class="btn" id="exportBtn">⬇ CSV</button>
         <button class="btn" id="exportXlsxBtn">⬇ EXCEL</button>
         <button class="btn" id="exportPdfBtn">⬇ PDF REPORT</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
         <button class="btn" id="importLeadsBtn">⬆ IMPORT</button>
         <button class="btn btn-primary" id="addLeadBtn">+ ADD LEAD</button>
       </div>
@@ -1027,26 +1075,26 @@
       </div>
     </div>
     <div class="table-scroll">
-      <table class="leads">
+      <table class="leads" id="leadsTable">
         <colgroup>
-          <col style="width:50px"><col style="width:120px"><col style="width:150px"><col style="width:110px"><col style="width:140px">
-          <col style="width:90px"><col style="width:140px"><col style="width:130px"><col style="width:190px">
-          <col style="width:130px"><col style="width:110px"><col style="width:110px"><col style="width:110px">
+          <col class="col-compact" style="width:50px"><col class="col-compact" style="width:120px"><col class="col-compact" style="width:150px"><col style="width:110px"><col class="col-compact" style="width:140px">
+          <col style="width:90px"><col class="col-compact" style="width:140px"><col style="width:130px"><col style="width:190px">
+          <col class="col-compact" style="width:130px"><col style="width:110px"><col style="width:110px"><col style="width:110px">
           <col style="width:110px"><col style="width:110px"><col style="width:110px"><col style="width:120px">
-          <col style="width:150px"><col style="width:130px"><col style="width:140px">
-          <col style="width:130px"><col style="width:130px"><col style="width:80px"><col style="width:120px"><col style="width:130px">
-          <col style="width:100px"><col style="width:100px"><col style="width:130px"><col style="width:130px"><col style="width:70px">
+          <col class="col-compact" style="width:150px"><col style="width:130px"><col style="width:140px">
+          <col class="col-compact" style="width:130px"><col class="col-compact" style="width:130px"><col style="width:80px"><col style="width:120px"><col style="width:130px">
+          <col style="width:100px"><col style="width:100px"><col style="width:130px"><col style="width:130px"><col class="col-compact" style="width:70px">
         </colgroup>
         <thead>
           <tr>
-            <th>Sr. No.</th><th>Enquiry No</th><th>Company</th><th>Lead Value (₹)</th><th>Notes</th>
-            <th>Customer ID</th><th>Contact Person Name</th><th>Phone</th><th>Email</th>
-            <th>Status</th><th>Priority</th><th>Source</th><th>Lead Type</th>
+            <th class="col-compact">Sr. No.</th><th class="col-compact">Enquiry No</th><th class="col-compact">Company</th><th>Lead Value (₹)</th><th class="col-compact">Notes</th>
+            <th>Customer ID</th><th class="col-compact">Contact Person Name</th><th>Phone</th><th>Email</th>
+            <th class="col-compact">Status</th><th>Priority</th><th>Source</th><th>Lead Type</th>
             <th>Department</th><th>State</th><th>City</th><th>Country</th>
-            <th>Application</th><th>Product</th><th>Moved to SourcePro</th>
-            <th>Generated By</th><th>Assigned To</th><th>Follow-ups</th><th>Last Follow-up</th><th>Next Follow-up</th>
+            <th class="col-compact">Application</th><th>Product</th><th>Moved to SourcePro</th>
+            <th class="col-compact">Generated By</th><th class="col-compact">Assigned To</th><th>Follow-ups</th><th>Last Follow-up</th><th>Next Follow-up</th>
             <th>ERP Lead No</th><th>Order No</th><th>Order Date</th><th>Enquiry Received Date</th>
-            <th>Edit</th>
+            <th class="col-compact">Edit</th>
           </tr>
         </thead>
         <tbody id="leadsBody"></tbody>
@@ -2194,6 +2242,28 @@ function flushActiveTableEdit(forceLeadValue){
 // push its current value every 15s so nothing is lost mid-edit.
 setInterval(() => flushActiveTableEdit(false), AUTOSAVE_INTERVAL_MS);
 
+// Compact view for the All Leads table: 30 columns is a lot to scan when you only
+// ever care about a handful of them, so this hides everything except the 9 fields
+// requested (Sr No, Enquiry No, Customer, Application, Notes, Status, Generated By,
+// Assigned To, Contact Person) plus the always-needed Edit affordance. Pure CSS
+// (table.leads.compact-view, see .col-compact) — no data is hidden from exports or
+// the edit modal, just this table's columns. Persisted like the active-tab choice.
+const COMPACT_VIEW_KEY = 'syncaxis_leads_compact_view';
+function applyCompactView(on){
+  const table = $('#leadsTable');
+  const btn = $('#compactViewToggle');
+  if(!table || !btn) return;
+  table.classList.toggle('compact-view', on);
+  btn.classList.toggle('active', on);
+  btn.textContent = on ? '📐 Full View' : '📐 Compact View';
+}
+$('#compactViewToggle').addEventListener('click', () => {
+  const nowOn = !$('#leadsTable').classList.contains('compact-view');
+  applyCompactView(nowOn);
+  try{ localStorage.setItem(COMPACT_VIEW_KEY, nowOn ? '1' : '0'); }catch(e){}
+});
+try{ applyCompactView(localStorage.getItem(COMPACT_VIEW_KEY) === '1'); }catch(e){}
+
 // Manual "Save Now" — an explicit save action alongside the automatic ones above:
 // commits whatever table cell is currently focused (Lead Value included, since a
 // deliberate click here is an unambiguous "I'm done" signal), and if the Add Lead
@@ -2759,17 +2829,17 @@ function rowHtml(r){
   const mailto = mailtoFor(r);
   const status = r['Follow-Up Status'] || 'Not Contacted';
   return `
-    <tr class="${isNew ? 'new-row' : ''}" data-sr="${r['Sr.no']}">
-      <td data-label="Sr. No.">${srCellHtml(r['Sr.no'])}</td>
-      <td data-label="Enquiry No"><div class="enquiry-cell priority-${priorityKey(r['Lead Quality'])}"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
-      <td data-label="Company" title="Linked to Customer Master — rename it there (Customer Master panel) so every linked lead stays in sync, rather than editing it per-lead here.">${escapeHtml(r['Company Name']) || '—'}</td>
+    <tr class="${isNew ? 'new-row' : ''} status-row-${slug(status)}" data-sr="${r['Sr.no']}">
+      <td class="col-compact" data-label="Sr. No.">${srCellHtml(r['Sr.no'])}</td>
+      <td class="col-compact" data-label="Enquiry No"><div class="enquiry-cell priority-${priorityKey(r['Lead Quality'])}"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
+      <td class="col-compact" data-label="Company" title="Linked to Customer Master — rename it there (Customer Master panel) so every linked lead stays in sync, rather than editing it per-lead here.">${escapeHtml(r['Company Name']) || '—'}</td>
       <td data-label="Lead Value (₹)"><div class="lead-value-cell"><span class="inr-prefix">₹</span><input class="cell-input" type="text" inputmode="numeric" data-field="Lead Value" value="${formatINR(r['Lead Value'])}" placeholder="0"></div></td>
-      <td data-label="Notes">${notesCellHtml(r)}</td>
+      <td class="col-compact" data-label="Notes">${notesCellHtml(r)}</td>
       <td data-label="Customer ID" style="font-family:var(--font-mono); font-size:11px; color:var(--text-faint);" title="Linked Customer Master record — set automatically, not editable here">${escapeHtml(r['Customer ID']) || '—'}</td>
-      <td data-label="Contact Person Name"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
+      <td class="col-compact" data-label="Contact Person Name"><input class="cell-input" data-field="Visitor Name" value="${(r['Visitor Name']||'').replace(/"/g,'&quot;')}" placeholder="—"></td>
       <td data-label="Phone"><input class="cell-input" type="tel" data-field="Phone No." value="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Phone No.']||'').replace(/"/g,'&quot;')}" style="min-width:130px;"></td>
       <td data-label="Email"><input class="cell-input" type="email" data-field="Email ID" value="${(r['Email ID']||'').replace(/"/g,'&quot;')}" placeholder="—" title="${(r['Email ID']||'').replace(/"/g,'&quot;')}" style="min-width:190px;"></td>
-      <td data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status" style="min-width:120px;">
+      <td class="col-compact" data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status" style="min-width:120px;">
             ${STATUS_OPTIONS.map(s=>`<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
           </select></td>
       <td data-label="Priority"><select class="cell-input" data-field="Lead Quality" style="min-width:110px;">
@@ -2792,7 +2862,7 @@ function rowHtml(r){
             ${COUNTRY_OPTIONS.includes(r.Country) || !r.Country ? '' : `<option value="${escapeHtml(r.Country)}" selected>${escapeHtml(r.Country)}</option>`}
             ${COUNTRY_OPTIONS.map(c=>`<option value="${escapeHtml(c)}" ${c===r.Country?'selected':''}>${escapeHtml(c)}</option>`).join('')}
           </select></td>
-      <td data-label="Application"><select class="cell-input" data-field="Application Category" style="min-width:150px;" title="${(r['Application (as recorded)']||'').replace(/"/g,'&quot;')}">
+      <td class="col-compact" data-label="Application"><select class="cell-input" data-field="Application Category" style="min-width:150px;" title="${(r['Application (as recorded)']||'').replace(/"/g,'&quot;')}">
             <option value="" ${!r['Application Category']?'selected':''}>—</option>
             ${ALL_APP_CATS.includes(r['Application Category']) || !r['Application Category'] ? '' : `<option value="${escapeHtml(r['Application Category'])}" selected>${escapeHtml(r['Application Category'])}</option>`}
             ${ALL_APP_CATS.map(a=>`<option value="${escapeHtml(a)}" ${a===r['Application Category']?'selected':''}>${escapeHtml(a)}</option>`).join('')}
@@ -2806,11 +2876,11 @@ function rowHtml(r){
             <option value="" ${!r['Moved to SourcePro']?'selected':''}>—</option>
             ${SOURCEPRO_OPTIONS.map(s=>`<option value="${s}" ${s===r['Moved to SourcePro']?'selected':''}>${s}</option>`).join('')}
           </select></td>
-      <td data-label="Generated By"><select class="cell-input" data-field="Lead Generated By" style="min-width:120px;">
+      <td class="col-compact" data-label="Generated By"><select class="cell-input" data-field="Lead Generated By" style="min-width:120px;">
             <option value="" ${!r['Lead Generated By']?'selected':''}>—</option>
             ${generatedByOptionsHtml(r['Lead Generated By'])}
           </select></td>
-      <td data-label="Assigned To"><select class="cell-input" data-field="Enquiry Assigned To" style="min-width:120px;">
+      <td class="col-compact" data-label="Assigned To"><select class="cell-input" data-field="Enquiry Assigned To" style="min-width:120px;">
             <option value="" ${!r['Enquiry Assigned To']?'selected':''}>—</option>
             ${generatedByOptionsHtml(r['Enquiry Assigned To'])}
           </select></td>
@@ -2821,7 +2891,7 @@ function rowHtml(r){
       <td data-label="Order No"><input class="cell-input" data-field="Order No" value="${(r['Order No']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:100px;"></td>
       <td data-label="Order Date"><input class="cell-input" type="date" data-field="Order Date" value="${r['Order Date']||''}" style="min-width:130px;"></td>
       <td data-label="Enquiry Received Date"><input class="cell-input" type="date" data-field="Received Date" value="${r['Received Date']||''}" style="min-width:130px;"></td>
-      <td data-label="Edit"><button class="btn btn-small lead-edit-btn" data-sr="${r['Sr.no']}" title="Open the full edit form for this lead">&#9998; Edit</button></td>
+      <td class="col-compact" data-label="Edit"><button class="btn btn-small lead-edit-btn" data-sr="${r['Sr.no']}" title="Open the full edit form for this lead">&#9998; Edit</button></td>
     </tr>`;
 }
 
@@ -4643,12 +4713,18 @@ async function handleAuthChange(user){
   currentCanDelete = resolved.canDelete === true;
   currentUser = resolved.displayName;
   currentUserEmail = user.email || '';
-  hideAuthGate();
+  // Keep the sign-in gate up (with a "loading" state) through the board fetch below,
+  // instead of hiding it immediately — hiding it first used to reveal an empty-looking
+  // dashboard for however long these network calls took, which read as a stuck/broken
+  // page rather than a page that was still loading.
+  const authSubmitBtn = $('#authLoginSubmitBtn');
+  if(authSubmitBtn) authSubmitBtn.textContent = 'Loading your dashboard…';
   updateRoleUI();
   await ensureBoardDocExists();
   await refreshTeamMembers();
   computeWorking();
   renderAll();
+  hideAuthGate();
   if(!realtimeSyncStarted){
     realtimeSyncStarted = true;
     startRealtimeSync();
@@ -4664,6 +4740,8 @@ function showAuthGate(){
   $('#authGateOverlay').classList.add('open');
   $('#mgmtAccess').style.display = 'none';
   $('#authForgotStatus').style.display = 'none';
+  const btn = $('#authLoginSubmitBtn');
+  btn.textContent = 'SIGN IN'; btn.disabled = false;
 }
 function hideAuthGate(){
   $('#authGateOverlay').classList.remove('open');
@@ -4699,11 +4777,14 @@ async function submitAuthLogin(){
   errBox.style.display = 'none';
   if(!email || !password){ errBox.textContent = 'Enter both email and password.'; errBox.style.display = 'block'; return; }
   const btn = $('#authLoginSubmitBtn');
-  const orig = btn.textContent;
   btn.textContent = 'Signing in…'; btn.disabled = true;
   try{
     await fb.signInWithEmailAndPassword(fb.auth, email, password);
-    // handleAuthChange (via onAuthStateChanged) takes it from here.
+    // Deliberately leave the button disabled with a "Signing in…"/"Loading your
+    // dashboard…" label from here — handleAuthChange (via onAuthStateChanged) owns
+    // the button text through the rest of the flow and only re-enables it once the
+    // gate is about to close, so there's no gap where the button looks clickable
+    // again while the dashboard is still loading behind it.
   }catch(err){
     const messages = {
       'auth/invalid-credential': 'Incorrect email or password.',
@@ -4715,8 +4796,8 @@ async function submitAuthLogin(){
     };
     errBox.textContent = messages[err.code] || ('Sign-in failed: ' + err.message);
     errBox.style.display = 'block';
+    btn.textContent = 'SIGN IN'; btn.disabled = false;
   }
-  btn.textContent = orig; btn.disabled = false;
 }
 $('#authLoginSubmitBtn').addEventListener('click', submitAuthLogin);
 $('#authPasswordInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') submitAuthLogin(); });
@@ -7025,9 +7106,16 @@ $('#offlineModalOkBtn').addEventListener('click', () => $('#offlineModal').class
 // BOOTSTRAP TAB BADGE UPDATES
 // ============================================
 
-// Load Bootstrap JS from CDN
+// Load Bootstrap JS from CDN. Tab restoration below waits on this script's own
+// load event rather than guessing a fixed delay — a hardcoded setTimeout(200) here
+// used to silently lose the "All Leads" tab-restore (and the tab bar itself stayed
+// unresponsive a beat longer than necessary) on any connection slower than that.
 var s = document.createElement('script');
 s.src = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js';
+var bootstrapJsReady = new Promise(function(resolve){
+  s.addEventListener('load', resolve);
+  s.addEventListener('error', resolve); // don't hang tab restore forever if the CDN request fails
+});
 document.head.appendChild(s);
 
 // Update tab badges with live counts
@@ -7064,8 +7152,8 @@ applyFilters = function(){
 
 // Persist active tab across reloads using Bootstrap tab events
 document.addEventListener('DOMContentLoaded', function(){
-  // Wait for Bootstrap JS to load, then set up tab persistence
-  setTimeout(function(){
+  // Wait for Bootstrap JS to actually finish loading (not a guessed delay), then set up tab persistence
+  bootstrapJsReady.then(function(){
     if(typeof bootstrap !== 'undefined' && bootstrap.Tab){
       // Restore saved tab
       var savedTab = null;
@@ -7087,7 +7175,7 @@ document.addEventListener('DOMContentLoaded', function(){
         });
       });
     }
-  }, 200);
+  });
 });
 </script>
 </body>
