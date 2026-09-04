@@ -1077,7 +1077,7 @@
     <div class="table-scroll">
       <table class="leads" id="leadsTable">
         <colgroup>
-          <col class="col-compact" style="width:50px"><col class="col-compact" style="width:120px"><col class="col-compact" style="width:150px"><col style="width:110px"><col class="col-compact" style="width:140px"><col class="col-compact" style="width:170px"><col class="col-compact" style="width:130px">
+          <col class="col-compact" style="width:50px"><col class="col-compact" style="width:120px"><col class="col-compact" style="width:150px"><col style="width:110px"><col class="col-compact" style="width:170px"><col class="col-compact" style="width:140px"><col class="col-compact" style="width:130px">
           <col style="width:90px"><col class="col-compact" style="width:140px"><col style="width:130px"><col style="width:190px">
           <col style="width:110px"><col style="width:110px"><col style="width:110px">
           <col style="width:110px"><col style="width:110px"><col style="width:110px"><col style="width:120px">
@@ -1087,7 +1087,7 @@
         </colgroup>
         <thead>
           <tr>
-            <th class="col-compact">Sr. No.</th><th class="col-compact">Enquiry No</th><th class="col-compact">Company</th><th>Lead Value (₹)</th><th class="col-compact">Notes</th><th class="col-compact">Application Detail</th><th class="col-compact">Status</th>
+            <th class="col-compact">Sr. No.</th><th class="col-compact">Enquiry No</th><th class="col-compact">Company</th><th>Lead Value (₹)</th><th class="col-compact">Application Detail</th><th class="col-compact">Notes</th><th class="col-compact">Status</th>
             <th>Customer ID</th><th class="col-compact">Contact Person Name</th><th>Phone</th><th>Email</th>
             <th>Priority</th><th>Source</th><th>Lead Type</th>
             <th>Department</th><th>State</th><th>City</th><th>Country</th>
@@ -2835,8 +2835,8 @@ function rowHtml(r){
       <td class="col-compact" data-label="Enquiry No"><div class="enquiry-cell priority-${priorityKey(r['Lead Quality'])}"><span class="priority-badge" title="${r['Lead Quality'] ? escapeHtml(r['Lead Quality']) + ' priority' : 'No priority set'}">${priorityEmoji(r['Lead Quality'])}</span><input class="cell-input" data-field="Enquiry Number" value="${(r['Enquiry Number']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:110px;"></div></td>
       <td class="col-compact" data-label="Company" title="Linked to Customer Master — rename it there (Customer Master panel) so every linked lead stays in sync, rather than editing it per-lead here.">${escapeHtml(r['Company Name']) || '—'}</td>
       <td data-label="Lead Value (₹)"><div class="lead-value-cell"><span class="inr-prefix">₹</span><input class="cell-input" type="text" inputmode="numeric" data-field="Lead Value" value="${formatINR(r['Lead Value'])}" placeholder="0"></div></td>
-      <td class="col-compact" data-label="Notes">${notesCellHtml(r)}</td>
       <td class="col-compact" data-label="Application Detail"><input class="cell-input" data-field="Application (as recorded)" value="${(r['Application (as recorded)']||'').replace(/"/g,'&quot;')}" placeholder="—" style="min-width:170px;"></td>
+      <td class="col-compact" data-label="Notes">${notesCellHtml(r)}</td>
       <td class="col-compact" data-label="Status"><select class="cell-input status-${slug(status)}" data-field="Follow-Up Status" style="min-width:120px;">
             ${STATUS_OPTIONS.map(s=>`<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
           </select></td>
