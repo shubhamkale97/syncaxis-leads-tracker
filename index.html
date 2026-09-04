@@ -299,7 +299,12 @@
     font-family: var(--font-mono); font-size:10px; color: var(--text-dim); text-transform:uppercase; letter-spacing:.04em;
     border-bottom:1px solid var(--line); z-index: 1; white-space:nowrap;
   }
-  table.leads td{ padding:9px 10px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; }
+  /* A td's content has no overflow protection by default -- a value wider than its
+     column (a long Customer ID, an unusually long field) can visually spill into the
+     next cell instead of wrapping/clipping, which is especially bad next to the
+     sticky Edit column pinned at the right edge (its opaque background only covers
+     its own box, not a neighboring cell's overflow bleeding across the boundary). */
+  table.leads td{ padding:9px 10px; border-bottom:1px solid var(--line-soft); color: var(--text-dim); vertical-align:middle; overflow:hidden; }
   table.leads tbody tr:nth-child(even) td{ background: rgba(255,255,255,0.015); }
   table.leads tr:hover td{ background: rgba(255,255,255,0.035); }
   /* A thin colour accent on the leftmost cell, keyed to the row's Follow-Up Status
