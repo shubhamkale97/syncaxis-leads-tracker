@@ -1476,6 +1476,14 @@ const TEAM_DIRECTORY_COLLECTION = 'teamDirectory'; // names-only, readable by an
 // update/delete = Super Admin only -- a real boundary, and append-only for everyone
 // else. It also lifts the log out of the board doc's 1MB ceiling.
 const ACTIVITY_LOG_COLLECTION = 'activityLog';
+// Assignment-notification email service (see /notifier in this repo) — a small
+// separate Vercel deployment, since this dashboard is a static site with no backend
+// of its own. Sends the "you've been assigned a lead" email with Accept/Decline/
+// Reschedule links, and handles those clicks server-side (they arrive from someone's
+// inbox, often before they've ever signed into this app). Leave the placeholder in
+// place until /notifier is deployed — notifyAssignmentChange() no-ops until then, so
+// assigning leads keeps working normally, just without the email.
+const NOTIFIER_BASE_URL = 'PASTE_YOUR_NOTIFIER_URL_HERE'; // e.g. 'https://syncaxis-leads-notifier.vercel.app'
 const AUTOSAVE_INTERVAL_MS = 15000; // heartbeat autosave while actively typing
 
 // ============ Access control ============
@@ -2720,6 +2728,53 @@ function mailtoFor(row){
   return `mailto:${row['Email ID']}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+// Fires the "you've been assigned a lead" email (see /notifier) whenever Enquiry
+// Assigned To changes to a real name — from the inline table cell, the Edit Lead
+// modal, wherever. Deliberately fire-and-forget: the assignment itself is already
+// saved to Firestore by the time this runs, so a slow/failed email must never block
+// or roll back the save, only surface a toast so it isn't silently lost.
+async function notifyAssignmentChange(srno, assignedToName){
+  if(!NOTIFIER_BASE_URL || NOTIFIER_BASE_URL.startsWith('PASTE_')) return; // not deployed/configured yet
+  if(!canWrite()) return; // the assignment write itself was blocked (e.g. a viewer) -- nothing actually changed, so no email either
+  if(!assignedToName || !fb || !fb.auth || !fb.auth.currentUser) return;
+  const lead = workingLeads.find(r => String(r['Sr.no']) === String(srno));
+  if(!lead) return;
+  try{
+    const idToken = await fb.auth.currentUser.getIdToken();
+    const latest = notesFor(srno)[0];
+    const resp = await fetch(`${NOTIFIER_BASE_URL}/api/notify-assignment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify({
+        srNo: String(srno),
+        assignedToName,
+        assignedByName: currentUser || currentUserEmail || 'A teammate',
+        lead: {
+          enquiryNumber: lead['Enquiry Number'] || '',
+          companyName: lead['Company Name'] || '',
+          contactPerson: lead['Visitor Name'] || '',
+          phone: lead['Phone No.'] || '',
+          email: lead['Email ID'] || '',
+          applicationCategory: lead['Application Category'] || '',
+          applicationDetail: lead['Application (as recorded)'] || '',
+          leadValue: formatINR(lead['Lead Value']),
+          city: lead.City || '', state: lead.State || '',
+          status: lead['Follow-Up Status'] || '',
+          priority: lead['Lead Quality'] || '',
+          latestNote: latest ? latest.text : '',
+        },
+      }),
+    });
+    if(!resp.ok){
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+  }catch(err){
+    console.error('Could not send assignment notification email:', err);
+    showToast(`Saved, but couldn't email ${assignedToName} about the assignment: ${err.message}`, 'error');
+  }
+}
+
 let lastFiltered = [];
 function applyFilters(){
   const q = ($('#searchBox').value||'').trim().toLowerCase();
@@ -2960,7 +3015,10 @@ function wireRowEvents(){
             return;
           }
         }
+        const isAssignedToChange = el.dataset.field === 'Enquiry Assigned To';
+        const prevAssignedTo = isAssignedToChange ? ((workingLeads.find(x => String(x['Sr.no']) === srno) || {})['Enquiry Assigned To'] || '') : null;
         setField(srno, el.dataset.field, valueToSave);
+        if(isAssignedToChange && valueToSave && valueToSave !== prevAssignedTo){ notifyAssignmentChange(srno, valueToSave); }
         const srCell = tr.querySelector('td:first-child');
         if(srCell) srCell.innerHTML = srCellHtml(srno);
         if(el.dataset.field === 'Follow-Up Status'){
@@ -3426,6 +3484,8 @@ $('#leadEditSaveBtn').addEventListener('click', async () => {
     changes.forEach(c => {
       logActivity('edit-lead', `${c.field} on ${companyLabel}: "${truncateForLog(c.prev, 40)}" → "${truncateForLog(c.next, 40)}"`, { srno: key, field: c.field });
     });
+    const assignChange = changes.find(c => c.field === 'Enquiry Assigned To');
+    if(assignChange && assignChange.next) notifyAssignmentChange(key, assignChange.next);
     showToast(`Saved ${changes.length} change${changes.length === 1 ? '' : 's'} to ${companyLabel}.`, 'success');
   }catch(err){
     showToast('Could not save: ' + err.message, 'error');

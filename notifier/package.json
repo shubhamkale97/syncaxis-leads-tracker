@@ -1,0 +1,9 @@
+{
+  "name": "syncaxis-leads-notifier",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless email + response handler for lead-assignment notifications (Accept/Decline/Reschedule) for the Syncaxis Leads Tracker.",
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}

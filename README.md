@@ -8,6 +8,8 @@ Live exhibition lead-tracking dashboard, synced across the team via Firebase Fir
 
 This is a **single-page app with no build step**. The entire dashboard lives in `index.html` (served as-is via GitHub Pages). Firebase Firestore handles real-time data sync across all signed-in teammates.
 
+The one exception is [`notifier/`](notifier/) — a small, separately-deployed Vercel service that emails whoever a lead gets assigned to (with Accept/Decline/Reschedule links) and records their response. It exists because the dashboard itself is static with no backend; see [`notifier/README.md`](notifier/README.md) for what it does and how to deploy it.
+
 ### Tab Navigation UI (Bootstrap 5.3.3)
 
 The dashboard uses **Bootstrap 5.3.3** (loaded from jsDelivr CDN) for its tab navigation:
@@ -39,6 +41,7 @@ Tab badges update live whenever the underlying render functions fire (`renderFol
 | `prospect-finder.html` | **Deprecated.** Redirects to `./` (main dashboard). Previously a standalone prospect search tool; now merged into the Leads Tracker. |
 | `icons/` | PWA icons (192px, 512px, maskable, apple-touch-icon, favicons). |
 | `CNAME` | Custom domain: `inquiry.syncaxis.com` |
+| `notifier/` | Separate Vercel service — sends the lead-assignment email and handles Accept/Decline/Reschedule. Not part of the GitHub Pages deploy; see its own README. |
 
 ### Bootstrap Loading
 

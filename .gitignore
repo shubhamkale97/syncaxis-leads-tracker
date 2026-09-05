@@ -14,3 +14,17 @@
 !sw.js
 !icons/
 !icons/*.png
+
+# notifier/ is a separate deployable (Vercel serverless functions) — no secrets or
+# customer data live in these files, only code; env vars/credentials are set in the
+# Vercel project itself, never committed. See notifier/.gitignore for its own
+# node_modules/.env exclusions.
+!notifier/
+!notifier/.gitignore
+!notifier/README.md
+!notifier/package.json
+!notifier/vercel.json
+!notifier/api/
+!notifier/api/**
+!notifier/lib/
+!notifier/lib/**

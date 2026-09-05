@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/a", "destination": "/api/action/accept" },
+    { "source": "/d", "destination": "/api/action/decline" },
+    { "source": "/r", "destination": "/api/action/reschedule" }
+  ]
+}
